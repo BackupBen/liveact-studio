@@ -51,11 +51,12 @@ RUN pip install --no-cache-dir flash-attn --no-build-isolation \
 # LightVAE aus LightX2V — av+cython vorher (av hat fertige Wheels; sonst
 # wuerde setup_vae.py av per easy_install aus dem Quellcode bauen).
 # Fallback: direkter Copy des Pure-Python-Pakets in site-packages.
-RUN pip install --no-cache-dir av cython \
+# (Kein Import-Check: LightX2V prueft beim Import CUDA-Devices — geht nur auf GPU.)
+RUN pip install --no-cache-dir av cython einops loguru \
     && git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
     && cd /tmp/LightX2V \
     && (python setup_vae.py install || cp -r lightx2v /usr/local/lib/python3.10/site-packages/) \
-    && python -c "from lightx2v.models.video_encoders.hf.wan.vae import WanVAE; print('LightVAE import OK')" \
+    && python -c "import os; assert os.path.exists('/usr/local/lib/python3.10/site-packages/lightx2v/models/video_encoders/hf/wan/vae.py'); print('LightVAE-Dateien OK')" \
     && rm -rf /tmp/LightX2V /root/.cache
 
 # Unsere Dateien + Serverless-Extras
