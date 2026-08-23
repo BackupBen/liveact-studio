@@ -48,9 +48,14 @@ RUN pip install --no-cache-dir flash-attn --no-build-isolation \
         --find-links https://github.com/Dao-AILab/flash-attention/releases/tag/v2.8.3 \
     || echo "WARN: flash-attn Wheel nicht gefunden — SDPA-Fallback wird genutzt"
 
-# LightVAE aus LightX2V (Pure-Python-Setup, keine Kompilierung)
-RUN git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
-    && cd /tmp/LightX2V && python setup_vae.py install \
+# LightVAE aus LightX2V — av+cython vorher (av hat fertige Wheels; sonst
+# wuerde setup_vae.py av per easy_install aus dem Quellcode bauen).
+# Fallback: direkter Copy des Pure-Python-Pakets in site-packages.
+RUN pip install --no-cache-dir av cython \
+    && git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
+    && cd /tmp/LightX2V \
+    && (python setup_vae.py install || cp -r lightx2v /usr/local/lib/python3.10/site-packages/) \
+    && python -c "from lightx2v.models.video_encoders.hf.wan.vae import WanVAE; print('LightVAE import OK')" \
     && rm -rf /tmp/LightX2V /root/.cache
 
 # Unsere Dateien + Serverless-Extras
