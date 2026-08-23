@@ -12,8 +12,9 @@ from typing import Optional
 
 import requests
 
-REST = "https://rest.runpod.io"
-GQL = "https://api.runpod.io/graphql"
+REST = "https://rest.runpod.io"      # v1-CRUD-API (volumes, endpoints)
+GQL = "https://api.runpod.io/graphql"  # GraphQL (templates, pods)
+JOBS = "https://api.runpod.ai"        # v2-Job-API (run/status/cancel) — NICHT rest.runpod.io!
 
 
 class RunPodError(RuntimeError):
@@ -227,7 +228,7 @@ def submit(endpoint_id: str, payload: dict, policy: dict | None = None,
     body = {"input": payload}
     if policy:
         body["policy"] = policy
-    r = requests.post(f"{REST}/v2/{endpoint_id}/run", headers=_headers(k), json=body, timeout=30)
+    r = requests.post(f"{JOBS}/v2/{endpoint_id}/run", headers=_headers(k), json=body, timeout=30)
     try:
         data = r.json()
     except Exception:
@@ -239,7 +240,7 @@ def submit(endpoint_id: str, payload: dict, policy: dict | None = None,
 
 def status(endpoint_id: str, runpod_job_id: str, key: Optional[str] = None) -> dict:
     k = _resolve_key(key)
-    r = requests.get(f"{REST}/v2/{endpoint_id}/status/{runpod_job_id}",
+    r = requests.get(f"{JOBS}/v2/{endpoint_id}/status/{runpod_job_id}",
                      headers=_headers(k), timeout=30)
     if r.status_code != 200:
         raise RunPodError(f"RunPod /status {r.status_code}: {(r.text or '(leerer Body)')[:300]}")
@@ -248,7 +249,7 @@ def status(endpoint_id: str, runpod_job_id: str, key: Optional[str] = None) -> d
 
 def cancel(endpoint_id: str, runpod_job_id: str, key: Optional[str] = None) -> dict:
     k = _resolve_key(key)
-    r = requests.post(f"{REST}/v2/{endpoint_id}/cancel/{runpod_job_id}",
+    r = requests.post(f"{JOBS}/v2/{endpoint_id}/cancel/{runpod_job_id}",
                       headers=_headers(k), timeout=30)
     if r.status_code != 200:
         raise RunPodError(f"RunPod /cancel {r.status_code}: {(r.text or '(leerer Body)')[:300]}")
