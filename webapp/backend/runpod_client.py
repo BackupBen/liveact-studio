@@ -157,9 +157,9 @@ def ensure_endpoint(key: str, name: str, template_id: str, gpu: str,
 def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
                          gpu: str = "NVIDIA RTX A4000") -> str:
     cmd = (
-        "pip install -q huggingface_hub && "
+        "pip3 install -q huggingface_hub requests && "
         f"curl -sL {repo}/raw/main/worker/scripts/download_models.py -o /tmp/dl.py && "
-        "python /tmp/dl.py --volume /runpod-volume && "
+        "python3 /tmp/dl.py --volume /runpod-volume && "
         "echo MODEL_DOWNLOAD_DONE"
     )
     # GraphQL-Literal ohne Typ-Annotationen im Input-Objekt (robust gegen Schema-Schwankungen)
@@ -168,6 +168,7 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
 
     # networkVolumeId pinnt den Standort — KEIN zusaetzliches dataCenterId
     # (fuehrte zu Fehlern bei der Maschinensuche).
+    # Image-Tag: runpod/base:0.4.0 existiert nicht mehr (2026) — 1.1.0-ubuntu2204 ist aktuell.
     mutation = (
         "mutation { podFindAndDeployOnDemand(input: { "
         "cloudType: ALL, "
@@ -176,7 +177,7 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
         "volumeInGb: 0, "
         f"gpuTypeId: {lit(gpu)}, "
         f"name: {lit('liveact-model-download')}, "
-        f"imageName: {lit('runpod/base:0.4.0')}, "
+        f"imageName: {lit('runpod/base:1.1.0-ubuntu2204')}, "
         f"dockerArgs: {lit('bash -c ' + json.dumps(cmd))}, "
         f"networkVolumeId: {lit(volume_id)}, "
         "env: [] "
