@@ -1,10 +1,13 @@
 """Settings-Store: persistierte RunPod-Konfiguration (data/settings.json).
 
 Reihenfolge: Settings-Store (von der Webapp gesetzt) > ENV.
+WICHTIG: Ohne persistentes Volume auf /app/data (Coolify) überlebt der
+Store keinen Redeploy — dann ENV-Variablen nutzen.
 """
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -39,8 +42,9 @@ def save(settings: dict) -> None:
 def get_runpod_credentials() -> tuple[Optional[str], Optional[str]]:
     """(api_key, endpoint_id) — Store zuerst, dann ENV-Fallback."""
     s = load()
-    return (s.get("runpod_api_key") or None,
-            s.get("runpod_endpoint_id") or None)
+    key = s.get("runpod_api_key") or os.environ.get("RUNPOD_API_KEY") or None
+    endpoint_id = s.get("runpod_endpoint_id") or os.environ.get("RUNPOD_ENDPOINT_ID") or None
+    return key, endpoint_id
 
 
 def get_runpod_setup() -> Optional[dict]:
