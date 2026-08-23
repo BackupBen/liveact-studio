@@ -28,6 +28,10 @@ RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
     && bash /tmp/mc.sh -b -p /opt/conda && rm /tmp/mc.sh
 ENV PATH=/opt/conda/bin:$PATH
 
+# Conda-ToS fuer Default-Channels akzeptieren (non-interactive Builds)
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
 # Python 3.10 env (wie Upstream)
 RUN conda create -n liveact python=3.10 -y
 ENV PATH=/opt/conda/envs/liveact/bin:$PATH
