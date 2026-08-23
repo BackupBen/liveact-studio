@@ -144,7 +144,7 @@ def ensure_endpoint(key: str, name: str, template_id: str, gpu: str,
         "scalerValue": 4,
         "idleTimeout": 5,
         "executionTimeoutMs": execution_timeout_ms,
-        "flashBoot": False,
+        "flashboot": False,
     }
     r = requests.post(f"{REST}/v1/endpoints", headers=_headers(key), timeout=30, json=body)
     if r.status_code not in (200, 201):
