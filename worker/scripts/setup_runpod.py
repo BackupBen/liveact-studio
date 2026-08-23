@@ -111,8 +111,7 @@ def launch_download_pod(volume_id: str, dc: str, repo: str, gpu: str) -> str:
         "dataCenterId": dc,
         "env": [],
     }}
-    # exakter Input-Typname variiert leicht je API-Stand — wir versuchen den Standard:
-    data = _gql(q.replace("PodFindAndDeployOnDemandInput!", "PodFindAndDeployOnDemandInput!"), variables)
+    data = _gql(q, variables)
     pod_id = data["podFindAndDeployOnDemand"]["id"]
     print(f"[download-pod] gestartet: {pod_id}")
     print("[download-pod] Logs in der Console beobachten; am Ende erscheint MODEL_DOWNLOAD_DONE.")
@@ -167,7 +166,7 @@ def main():
     ap = argparse.ArgumentParser(description="RunPod-Setup per API")
     ap.add_argument("--volume-name", default="liveact-models")
     ap.add_argument("--size", type=int, default=200, help="Volume-Größe in GB (Modelle ~60 GB)")
-    ap.add_argument("--dc", default="US-KS-2", help="Datacenter-ID ( muss GPU-Verfügbarkeit haben)")
+    ap.add_argument("--dc", default="US-KS-2", help="Datacenter-ID (muss GPU-Verfügbarkeit haben)")
     ap.add_argument("--template-id", help="Serverless-Template-ID (aus der Console)")
     ap.add_argument("--endpoint-name", default="liveact")
     ap.add_argument("--gpu", default="NVIDIA H100 PCIe", help="GPU-Type-ID, z. B. 'NVIDIA H100 PCIe', 'NVIDIA A100 80GB PCIe', 'NVIDIA GeForce RTX 4090'")
