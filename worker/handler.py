@@ -109,7 +109,9 @@ def get_renderer(cfg_overrides: dict):
         os.getenv("LIVEACT_BLOCK_OFFLOAD", "0") == "1",
         os.getenv("LIVEACT_OFFLOAD_CACHE", "0") == "1",
     )
-    key = gpu_flags
+    size = (cfg_overrides or {}).get("size", os.getenv("LIVEACT_SIZE", "768*432"))
+    fps = (cfg_overrides or {}).get("fps", int(os.getenv("LIVEACT_FPS", "25")))
+    key = (gpu_flags, size, fps)
     if _RENDERER is not None and _RENDERER_CFG_KEY == key:
         return _RENDERER
     if _RENDERER is not None:
@@ -123,8 +125,8 @@ def get_renderer(cfg_overrides: dict):
     cfg = {
         "ckpt_dir": str(MODEL_DIR),
         "wav2vec_dir": str(WAV2VEC_DIR),
-        "size": os.getenv("LIVEACT_SIZE", "768*432"),
-        "fps": int(os.getenv("LIVEACT_FPS", "25")),
+        "size": size,
+        "fps": fps,
         "fp8_kv_cache": gpu_flags[0],
         "block_offload": gpu_flags[1],
         "offload_cache": gpu_flags[2],
