@@ -143,6 +143,24 @@ def get_renderer(cfg_overrides: dict):
 def handler(job):
     """RunPod-Serverless-Entry-Point."""
     job_input = job["input"]
+
+    # --- Sondermodus: Modelle aufs Volume laden (Setup-Helfer) -------------
+    if job_input.get("download_models"):
+        from huggingface_hub import snapshot_download
+        vol = os.getenv("MODEL_DIR", "/runpod-volume/models/LiveAct")
+        models_root = str(Path(vol).parent)
+        t0 = time.time()
+        def dl_progress(pct, note):
+            send_progress(job_input, pct, note)
+        dl_progress(1, "Lade Soul-AILab/LiveAct (~55 GB) aufs Volume …")
+        snapshot_download("Soul-AILab/LiveAct",
+                          local_dir=f"{models_root}/LiveAct", max_workers=8)
+        dl_progress(80, "Lade chinese-wav2vec2-base (~400 MB) …")
+        snapshot_download("TencentGameMate/chinese-wav2vec2-base",
+                          local_dir=f"{models_root}/chinese-wav2vec2-base", max_workers=4)
+        return {"downloaded": True, "seconds": round(time.time() - t0, 1),
+                "models_root": models_root}
+
     t0 = time.time()
     job_id = job_input.get("job_id", "unknown")
 

@@ -222,15 +222,36 @@ def download_pod(body: DownloadPodAction):
         vol_id = setup.get("volume_id")
         if not vol_id:
             raise HTTPException(400, "Kein Volume vorhanden — zuerst /api/setup")
+        endpoint_id = setup.get("endpoint_id") or (settings_store.get_runpod_credentials()[1] or "")
+        if not endpoint_id:
+            raise HTTPException(400, "Kein Endpoint vorhanden — zuerst /api/setup")
+
+        # 1. Versuch: billiger Download-Pod. 2. Versuch: Serverless-Job
+        # (laeuft in der Endpoint-Queue statt an Availability zu scheitern).
         try:
             pod_id = runpod_client.launch_download_pod(
                 key, vol_id, setup.get("datacenter", "US-KS-2"),
                 repo="https://github.com/BackupBen/liveact-studio")
-        except Exception as e:
-            raise HTTPException(502, f"Download-Pod-Start fehlgeschlagen: {e}")
-        setup["download_pod"] = {"pod_id": pod_id, "started_at": time.time()}
+            setup["download_pod"] = {"pod_id": pod_id, "started_at": time.time(), "mode": "pod"}
+            mode = "pod"
+        except Exception as pod_err:
+            try:
+                resp = runpod_client.submit(
+                    endpoint_id,
+                    {"download_models": True, "job_id": "model-download"},
+                    policy={"executionTimeout": 14400000, "ttl": 86400000},
+                    key=key)
+                setup["download_pod"] = {
+                    "runpod_job_id": resp.get("id"), "started_at": time.time(),
+                    "mode": "serverless", "note": str(pod_err)[:200]}
+                mode = "serverless"
+            except Exception as e:
+                raise HTTPException(502, f"Download-Pod-Start fehlgeschlagen: {e}")
         s["runpod_setup"] = setup
         settings_store.save(s)
-        return {"pod_id": pod_id}
+        if mode == "pod":
+            return {"pod_id": setup["download_pod"]["pod_id"], "mode": mode}
+        return {"pod_id": None, "mode": mode,
+                "runpod_job_id": setup["download_pod"]["runpod_job_id"]}
 
     raise HTTPException(400, "action: status | kill | restart")
