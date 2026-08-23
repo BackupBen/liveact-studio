@@ -99,8 +99,16 @@
     position: fixed; bottom: 20px; right: 20px; background: var(--card2); color: var(--text);
     border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px;
     padding: 12px 18px; font-size: 13px; z-index: 100; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    user-select: text; cursor: text; white-space: pre-wrap; word-break: break-word;
+    max-width: 480px; max-height: 40vh; overflow: auto;
   }
   .toast.err { border-left-color: var(--danger); }
+  textarea.errbox {
+    width: 100%; min-height: 72px; background: var(--card2); color: var(--text);
+    border: 1px solid var(--danger); border-radius: 8px; padding: 8px 10px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical;
+    user-select: all; cursor: text; white-space: pre-wrap; word-break: break-word;
+  }
 </style>
 </head>
 <body>
@@ -377,8 +385,26 @@ function toast(msg, isErr) {
   const t = document.createElement('div');
   t.className = 'toast' + (isErr ? ' err' : '');
   t.textContent = msg;
+  t.onclick = () => t.remove();
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(() => t.remove(), isErr ? 30000 : 4000);
+}
+
+// Kopierbare Fehlerbox im Settings-Dialog (Klick = alles markieren)
+function showCopyableError(msg) {
+  let box = document.getElementById('copy-err');
+  if (!box) {
+    const label = document.createElement('div');
+    label.className = 'note'; label.style.marginTop = '10px';
+    label.textContent = 'Letzter Fehler (Klick hinein markiert alles, Strg+C kopiert):';
+    box = document.createElement('textarea');
+    box.className = 'errbox'; box.id = 'copy-err'; box.readOnly = true;
+    box.onclick = () => box.select();
+    const log = document.getElementById('setup-log');
+    log.prepend(label, box);
+  }
+  box.value = msg;
+  box.scrollIntoView({ block: 'nearest' });
 }
 
 // ---------- Settings & Setup ----------
@@ -439,7 +465,7 @@ async function startDownloadPod() {
   try {
     const r = await api('/api/setup/download-pod', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart' })});
     toast('Download-Pod gestartet: ' + r.pod_id + ' — Status in der RunPod-Console beobachten');
-  } catch (e) { toast('Download-Pod: ' + e.message, true); }
+  } catch (e) { toast('Download-Pod: ' + e.message, true); showCopyableError(e.message); }
 }
 
 async function pollSetup() {
