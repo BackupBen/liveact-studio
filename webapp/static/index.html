@@ -107,6 +107,7 @@
 <header>
   <h1>🎬 LiveAct <span>Studio</span></h1>
   <div class="health">
+    <button class="ghost small" onclick="openSettings()">⚙️ Setup</button>
     <span><span class="dot" id="dot-runpod"></span>RunPod</span>
     <span><span class="dot" id="dot-s3"></span>S3</span>
   </div>
@@ -156,6 +157,60 @@
     </section>
   </div>
 </main>
+
+<dialog id="settings">
+  <h2 style="margin-bottom:6px">⚙️ RunPod-Setup</h2>
+  <div class="note" style="margin-bottom:12px">API-Key einmalig hinterlegen — danach richtet ein Klick Volume, Template &amp; Endpoint automatisch ein.</div>
+
+  <label>RunPod API-Key</label>
+  <input type="text" id="set-apikey" placeholder="rpk_..." autocomplete="off">
+  <div class="note" id="set-apikey-hint"></div>
+
+  <div class="row">
+    <div>
+      <label>Worker-Image (Docker Hub)</label>
+      <input type="text" id="set-image" placeholder="docker.io/user/liveact-worker:latest">
+    </div>
+    <div>
+      <label>GPU</label>
+      <select id="set-gpu">
+        <option value="NVIDIA H100 PCIe">H100 PCIe</option>
+        <option value="NVIDIA H100 NVL">H100 NVL</option>
+        <option value="NVIDIA A100 80GB PCIe">A100 80GB</option>
+        <option value="NVIDIA GeForce RTX 4090">RTX 4090</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label>Datacenter</label>
+      <select id="set-dc">
+        <option value="US-KS-2">US-KS-2 (Standard)</option>
+        <option value="US-KS-1">US-KS-1</option>
+        <option value="US-MN-1">US-MN-1</option>
+        <option value="EU-SE-1">EU-SE-1</option>
+        <option value="NO-LB-1">NO-LB-1</option>
+      </select>
+    </div>
+    <div>
+      <label>Volume (Name / GB)</label>
+      <div class="row">
+        <input type="text" id="set-volname" value="liveact-models">
+        <input type="text" id="set-volsize" value="200">
+      </div>
+    </div>
+  </div>
+
+  <button onclick="saveSettings()">💾 Speichern</button>
+  <button id="btn-provision" onclick="runProvision()">🚀 RunPod einrichten (Volume + Template + Endpoint)</button>
+  <button id="btn-dlpod" class="ghost" onclick="startDownloadPod()">📦 Modelle aufs Volume laden (~55 GB, eigener kleiner Pod)</button>
+
+  <div id="setup-log" style="margin-top:14px"></div>
+
+  <div class="row" style="margin-top:14px">
+    <button class="ghost" onclick="document.getElementById('settings').close()">Schließen</button>
+  </div>
+</dialog>
 
 <dialog id="player">
   <h2 style="margin-bottom:10px" id="player-title">Video</h2>
@@ -324,6 +379,96 @@ function toast(msg, isErr) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 4000);
+}
+
+// ---------- Settings & Setup ----------
+let setupTimer = null;
+
+async function openSettings() {
+  $('settings').showModal();
+  try {
+    const s = await api('/api/settings');
+    $('set-apikey-hint').textContent = s.has_api_key ? '✅ API-Key hinterlegt' : 'Noch kein API-Key';
+    if (s.worker_image) $('set-image').value = s.worker_image;
+    if (s.gpu) $('set-gpu').value = s.gpu;
+    if (s.datacenter) $('set-dc').value = s.datacenter;
+    if (s.volume_name) $('set-volname').value = s.volume_name;
+    if (s.setup_done) toast('Setup bereits abgeschlossen — Endpoint ' + s.endpoint_id);
+  } catch (e) { /* ignore */ }
+  renderSetupLog();
+}
+
+async function saveSettings() {
+  const body = {
+    runpod_api_key: $('set-apikey').value.trim() || null,
+    worker_image: $('set-image').value.trim(),
+    gpu: $('set-gpu').value,
+    datacenter: $('set-dc').value,
+    volume_name: $('set-volname').value.trim(),
+  };
+  try {
+    await api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    $('set-apikey-hint').textContent = '✅ Gespeichert';
+    $('set-apikey').value = '';
+    toast('Settings gespeichert ✅');
+  } catch (e) { toast('Speichern fehlgeschlagen: ' + e.message, true); }
+}
+
+async function runProvision() {
+  $('btn-provision').disabled = true;
+  $('btn-provision').textContent = 'Richte ein … (Polling läuft)';
+  try {
+    await api('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      worker_image: $('set-image').value.trim() || 'docker.io/backupben/liveact-worker:latest',
+      volume_name: $('set-volname').value.trim() || 'liveact-models',
+      volume_size_gb: parseInt($('set-volsize').value) || 200,
+      datacenter: $('set-dc').value,
+      gpu: $('set-gpu').value,
+      start_download_pod: false,
+    })});
+    toast('Provisionierung gestartet');
+    pollSetup();
+  } catch (e) {
+    toast('Setup: ' + e.message, true);
+    $('btn-provision').disabled = false;
+    $('btn-provision').textContent = '🚀 RunPod einrichten (Volume + Template + Endpoint)';
+  }
+}
+
+async function startDownloadPod() {
+  try {
+    const r = await api('/api/setup/download-pod', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart' })});
+    toast('Download-Pod gestartet: ' + r.pod_id + ' — Status in der RunPod-Console beobachten');
+  } catch (e) { toast('Download-Pod: ' + e.message, true); }
+}
+
+async function pollSetup() {
+  if (setupTimer) clearInterval(setupTimer);
+  setupTimer = setInterval(async () => {
+    try {
+      const st = await api('/api/setup/status');
+      renderSetupLog(st);
+      if (!st.running) {
+        clearInterval(setupTimer); setupTimer = null;
+        $('btn-provision').disabled = false;
+        $('btn-provision').textContent = '🚀 RunPod einrichten (Volume + Template + Endpoint)';
+        if (st.error) toast('Setup-Fehler: ' + st.error, true);
+        else { toast('RunPod einsatzbereit 🎉'); refreshHealth(); }
+      }
+    } catch {}
+  }, 2000);
+}
+
+async function renderSetupLog(st) {
+  if (!st) { try { st = await api('/api/setup/status'); } catch { return; } }
+  const el = $('setup-log');
+  if (!st || (!st.steps || !st.steps.length)) {
+    el.innerHTML = '<div class="note">Noch kein Setup gelaufen.</div>';
+    return;
+  }
+  el.innerHTML = st.steps.map(s =>
+    `<div class="note">${s.status === 'error' ? '❌' : '✅'} <b>${s.name}</b> — ${s.detail}</div>`
+  ).join('') + (st.running ? '<div class="note">⏳ läuft …</div>' : '');
 }
 
 refreshHealth(); refreshAvatars(); refreshJobs();

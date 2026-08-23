@@ -25,13 +25,16 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import runpod_client, s3
+from . import settings_store
 from .jobstore import create_job, get as get_job, list_jobs, update
+from .setup_routes import router as setup_router
 from . import config
 
 log = logging.getLogger("liveact")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="LiveAct Studio", version="1.0.0")
+app = FastAPI(title="LiveAct Studio", version="1.1.0")
+app.include_router(setup_router)
 
 ALLOWED_AUDIO = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".opus", ".aac", ".webm"}
 ALLOWED_IMAGE = {".png", ".jpg", ".jpeg", ".webp"}
@@ -187,7 +190,11 @@ async def create_render_job(
         "prompt": prompt,
     })
 
-    # RunPod-Job asynchron einreichen
+    # RunPod-Job asynchron einreichen (API-Key ggf. aus Settings-Store)
+    key, _ = settings_store.get_runpod_credentials()
+    endpoint_id = config.RUNPOD_ENDPOINT_ID
+    if not endpoint_id:
+        _, endpoint_id = settings_store.get_runpod_credentials()
     worker_payload = {
         "job_id": job["id"],
         "s3_audio_key": audio_key,
@@ -203,7 +210,8 @@ async def create_render_job(
     }
 
     try:
-        resp = runpod_client.submit(config.RUNPOD_ENDPOINT_ID, worker_payload, policy=config.EXECUTION_POLICY)
+        resp = runpod_client.submit(endpoint_id, worker_payload,
+                                    policy=config.EXECUTION_POLICY, key=key)
         update(job["id"], status="submitting", runpod_job_id=resp.get("id"))
     except Exception as e:
         log.exception("RunPod-Submit fehlgeschlagen")
@@ -233,11 +241,17 @@ def job_cancel(job_id: str):
         raise HTTPException(404, "Job nicht gefunden")
     if job.get("runpod_job_id"):
         try:
-            runpod_client.cancel(config.RUNPOD_ENDPOINT_ID, job["runpod_job_id"])
+            key, endpoint_id = _runpod_creds()
+            runpod_client.cancel(endpoint_id, job["runpod_job_id"], key=key)
         except Exception as e:
             log.warning(f"Cancel bei RunPod fehlgeschlagen: {e}")
     update(job_id, status="cancelled", progress_note="Abgebrochen")
     return {"cancelled": job_id}
+
+
+def _runpod_creds() -> tuple[str | None, str | None]:
+    key, endpoint_id = settings_store.get_runpod_credentials()
+    return key, endpoint_id or config.RUNPOD_ENDPOINT_ID
 
 
 # --------------------------------------------------------------------------
@@ -315,7 +329,8 @@ def reconcile_job(job_id: str):
     if not rp_id:
         return job
     try:
-        st = runpod_client.status(config.RUNPOD_ENDPOINT_ID, rp_id)
+        key, endpoint_id = _runpod_creds()
+        st = runpod_client.status(endpoint_id, rp_id, key=key)
     except Exception as e:
         raise HTTPException(502, f"RunPod-Status: {e}")
     rp_status = st.get("status")
@@ -339,9 +354,10 @@ def reconcile_job(job_id: str):
 
 @app.get("/healthz")
 def healthz():
+    key, endpoint_id = settings_store.get_runpod_credentials()
     return {
         "ok": True,
-        "runpod_configured": bool(config.RUNPOD_API_KEY and config.RUNPOD_ENDPOINT_ID),
+        "runpod_configured": bool((key or config.RUNPOD_API_KEY) and (endpoint_id or config.RUNPOD_ENDPOINT_ID)),
         "s3_configured": bool(config.S3_BUCKET),
         "jobs": len(list_jobs(limit=1000)),
     }
