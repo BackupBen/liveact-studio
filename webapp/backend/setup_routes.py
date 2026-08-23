@@ -235,9 +235,14 @@ def download_pod(body: DownloadPodAction):
             setup["download_pod"] = {"pod_id": pod_id, "started_at": time.time(), "mode": "pod"}
             mode = "pod"
         except Exception as pod_err:
+            ep_for_download = setup.get("endpoint_id") or (settings_store.get_runpod_credentials()[1] or "")
+            if not ep_for_download:
+                raise HTTPException(
+                    400, f"Keine Endpoint-ID gespeichert — /api/setup (🚀) zuerst ausführen. "
+                         f"(Pod-Fehler war: {str(pod_err)[:150]})")
             try:
                 resp = runpod_client.submit(
-                    endpoint_id,
+                    ep_for_download,
                     {"download_models": True, "job_id": "model-download"},
                     policy={"executionTimeout": 14400000, "ttl": 86400000},
                     key=key)
@@ -246,7 +251,9 @@ def download_pod(body: DownloadPodAction):
                     "mode": "serverless", "note": str(pod_err)[:200]}
                 mode = "serverless"
             except Exception as e:
-                raise HTTPException(502, f"Download-Pod-Start fehlgeschlagen: {e}")
+                raise HTTPException(502, f"Download-Start fehlgeschlagen "
+                                         f"(endpoint={ep_for_download[:6]}…, "
+                                         f"pod-versuch: {str(pod_err)[:120]}): {e}")
         s["runpod_setup"] = setup
         settings_store.save(s)
         if mode == "pod":

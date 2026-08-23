@@ -222,11 +222,16 @@ def kill_pod(key: str, pod_id: str) -> None:
 def submit(endpoint_id: str, payload: dict, policy: dict | None = None,
            key: Optional[str] = None) -> dict:
     k = _resolve_key(key)
+    if not endpoint_id:
+        raise RunPodError("Keine Endpoint-ID konfiguriert (Setup erneut ausführen)")
     body = {"input": payload}
     if policy:
         body["policy"] = policy
     r = requests.post(f"{REST}/v2/{endpoint_id}/run", headers=_headers(k), json=body, timeout=30)
-    data = r.json()
+    try:
+        data = r.json()
+    except Exception:
+        raise RunPodError(f"RunPod /run {r.status_code}: {(r.text or '(leerer Body)')[:300]}")
     if r.status_code != 200 or data.get("status") in ("FAILED",):
         raise RunPodError(f"RunPod /run {r.status_code}: {data}")
     return data
@@ -237,7 +242,7 @@ def status(endpoint_id: str, runpod_job_id: str, key: Optional[str] = None) -> d
     r = requests.get(f"{REST}/v2/{endpoint_id}/status/{runpod_job_id}",
                      headers=_headers(k), timeout=30)
     if r.status_code != 200:
-        raise RunPodError(f"RunPod /status {r.status_code}: {r.text}")
+        raise RunPodError(f"RunPod /status {r.status_code}: {(r.text or '(leerer Body)')[:300]}")
     return r.json()
 
 
@@ -246,5 +251,5 @@ def cancel(endpoint_id: str, runpod_job_id: str, key: Optional[str] = None) -> d
     r = requests.post(f"{REST}/v2/{endpoint_id}/cancel/{runpod_job_id}",
                       headers=_headers(k), timeout=30)
     if r.status_code != 200:
-        raise RunPodError(f"RunPod /cancel {r.status_code}: {r.text}")
+        raise RunPodError(f"RunPod /cancel {r.status_code}: {(r.text or '(leerer Body)')[:300]}")
     return r.json()
