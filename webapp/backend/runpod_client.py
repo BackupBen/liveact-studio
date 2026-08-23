@@ -192,14 +192,20 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
         "NVIDIA GeForce RTX 4090",
     ] if g != gpu]
     last_err: RunPodError | None = None
+    tried: list[str] = []
     for gpu_type in gpu_chain:
+        tried.append(gpu_type)
         try:
             return _gql(key, mutation_for(gpu_type))["podFindAndDeployOnDemand"]["id"]
         except RunPodError as e:
             last_err = e
             if "no longer any instances" not in str(e) and "availability" not in str(e).lower():
                 raise  # anderer Fehler -> nicht weiterversuchen
-    raise last_err  # type: ignore[misc]
+    raise RunPodError(
+        f"Alle GPU-Typen im Datacenter des Volumes ausgelastet "
+        f"(versucht: {', '.join(tried)}). Spaeter erneut versuchen oder Volume in "
+        f"ein anderes Datacenter legen. Letzter RunPod-Fehler: {last_err}"
+    )
 
 
 def pod_status(key: str, pod_id: str) -> dict:
