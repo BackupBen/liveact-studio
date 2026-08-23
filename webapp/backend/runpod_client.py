@@ -166,24 +166,40 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
     def lit(v: str) -> str:
         return json.dumps(v)
 
-    # networkVolumeId pinnt den Standort — KEIN zusaetzliches dataCenterId
-    # (fuehrte zu Fehlern bei der Maschinensuche).
-    # Image-Tag: runpod/base:0.4.0 existiert nicht mehr (2026) — 1.1.0-ubuntu2204 ist aktuell.
-    mutation = (
-        "mutation { podFindAndDeployOnDemand(input: { "
-        "cloudType: ALL, "
-        "gpuCount: 1, "
-        "containerDiskInGb: 20, "
-        "volumeInGb: 0, "
-        f"gpuTypeId: {lit(gpu)}, "
-        f"name: {lit('liveact-model-download')}, "
-        f"imageName: {lit('runpod/base:1.1.0-ubuntu2204')}, "
-        f"dockerArgs: {lit('bash -c ' + json.dumps(cmd))}, "
-        f"networkVolumeId: {lit(volume_id)}, "
-        "env: [] "
-        "}) { id desiredStatus } }"
-    )
-    return _gql(key, mutation)["podFindAndDeployOnDemand"]["id"]
+    def mutation_for(gpu_type: str) -> str:
+        return (
+            "mutation { podFindAndDeployOnDemand(input: { "
+            "cloudType: ALL, "
+            "gpuCount: 1, "
+            "containerDiskInGb: 20, "
+            "volumeInGb: 0, "
+            f"gpuTypeId: {lit(gpu_type)}, "
+            f"name: {lit('liveact-model-download')}, "
+            f"imageName: {lit('runpod/base:1.1.0-ubuntu2204')}, "
+            f"dockerArgs: {lit('bash -c ' + json.dumps(cmd))}, "
+            f"networkVolumeId: {lit(volume_id)}, "
+            "env: [] "
+            "}) { id desiredStatus } }"
+        )
+
+    # GPU-Fallback: Der Download-Pod braucht keine Rechenleistung — es zaehlt
+    # nur Verfuegbarkeit im Datacenter des Volumes. Bei "no instances available"
+    # den naechsten Typ versuchen.
+    gpu_chain = [gpu] + [g for g in [
+        "NVIDIA RTX A5000",
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 4090",
+    ] if g != gpu]
+    last_err: RunPodError | None = None
+    for gpu_type in gpu_chain:
+        try:
+            return _gql(key, mutation_for(gpu_type))["podFindAndDeployOnDemand"]["id"]
+        except RunPodError as e:
+            last_err = e
+            if "no longer any instances" not in str(e) and "availability" not in str(e).lower():
+                raise  # anderer Fehler -> nicht weiterversuchen
+    raise last_err  # type: ignore[misc]
 
 
 def pod_status(key: str, pod_id: str) -> dict:
