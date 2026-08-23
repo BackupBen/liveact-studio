@@ -1,0 +1,8 @@
+.env
+data/
+webapp/data/
+__pycache__/
+*.pyc
+.pytest_cache
+*.mp4
+*.wav

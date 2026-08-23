@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveAct Studio</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --card2: #1e222b; --border: #2a2f3a;
+    --text: #e8eaf0; --muted: #8b93a5; --accent: #7c5cff; --accent2: #4ade80;
+    --danger: #f87171; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px; border-bottom: 1px solid var(--border);
+    background: rgba(15,17,21,.85); position: sticky; top: 0; backdrop-filter: blur(8px); z-index: 10;
+  }
+  header h1 { font-size: 19px; font-weight: 700; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  .health { font-size: 12px; color: var(--muted); display: flex; gap: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .dot.ok { background: var(--accent2); } .dot.bad { background: var(--danger); }
+  main { max-width: 980px; margin: 0 auto; padding: 26px 20px 60px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  }
+  .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  input[type=text], select, textarea {
+    width: 100%; background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none;
+  }
+  input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: .15s; font-size: 14px;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); color: var(--text); background: rgba(124,92,255,.05); }
+  .drop.has { border-style: solid; border-color: var(--accent2); color: var(--text); }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 16px;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+  button.small { width: auto; padding: 5px 12px; font-size: 12px; margin-top: 0; }
+  .avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .avatar-tile {
+    position: relative; border: 2px solid var(--border); border-radius: 10px; overflow: hidden;
+    cursor: pointer; aspect-ratio: 16/10; background: var(--card2);
+  }
+  .avatar-tile img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,92,255,.25); }
+  .avatar-tile .name {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; font-size: 11px;
+    background: rgba(0,0,0,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .avatar-tile .del {
+    position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 6px;
+    background: rgba(0,0,0,.6); color: var(--danger); border: 0; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center; margin: 0;
+  }
+  .jobs { display: flex; flex-direction: column; gap: 10px; }
+  .job {
+    display: flex; align-items: center; gap: 14px; background: var(--card2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; flex-wrap: wrap;
+  }
+  .job .meta { flex: 1; min-width: 200px; }
+  .job .meta b { font-size: 14px; }
+  .job .meta small { color: var(--muted); display: block; margin-top: 3px; }
+  .badge {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    padding: 3px 10px; border-radius: 20px;
+  }
+  .badge.queued, .badge.submitting { background: rgba(251,191,36,.15); color: var(--warn); }
+  .badge.running, .badge.postprocessing { background: rgba(124,92,255,.15); color: var(--accent); }
+  .badge.done { background: rgba(74,222,128,.15); color: var(--accent2); }
+  .badge.error, .badge.cancelled { background: rgba(248,113,113,.15); color: var(--danger); }
+  .pbar { height: 5px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .pbar > div { height: 100%; background: var(--accent); transition: width .5s; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  video { width: 100%; border-radius: 10px; margin-top: 10px; background: #000; }
+  .err { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  dialog {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; max-width: 720px; width: 92%;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: 12px 18px; font-size: 13px; z-index: 100; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  .toast.err { border-left-color: var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 LiveAct <span>Studio</span></h1>
+  <div class="health">
+    <span><span class="dot" id="dot-runpod"></span>RunPod</span>
+    <span><span class="dot" id="dot-s3"></span>S3</span>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <section class="card">
+      <h2>Neues Video</h2>
+      <label>Avatar</label>
+      <div class="avatars" id="avatar-grid"></div>
+      <button class="ghost small" style="width:100%;margin-top:10px" onclick="document.getElementById('avatar-upload').click()">+ Avatar hinzufügen</button>
+      <input type="file" id="avatar-upload" accept="image/*" hidden>
+
+      <label>Voiceover (MP3/WAV/M4A/OGG)</label>
+      <div class="drop" id="audio-drop">Audio hierher ziehen oder klicken</div>
+      <input type="file" id="audio-file" accept=".mp3,.wav,.m4a,.ogg,.flac,.opus,.aac,.webm" hidden>
+
+      <div class="row">
+        <div>
+          <label>Auflösung</label>
+          <select id="size">
+            <option value="768*432">768×432 (16:9)</option>
+            <option value="720*416">720×416 (Original-Training)</option>
+            <option value="512*512">512×512 (quadratisch)</option>
+          </select>
+        </div>
+        <div>
+          <label>FPS</label>
+          <select id="fps">
+            <option value="25">25</option>
+            <option value="20">20</option>
+            <option value="24">24</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Prompt (Verhalten des Avatars)</label>
+      <input type="text" id="prompt" value="a person is talking, natural movements" placeholder="a person is talking">
+
+      <button id="btn-render" onclick="render()" disabled>🚀 Video rendern</button>
+      <div class="err" id="render-err"></div>
+    </section>
+
+    <section class="card">
+      <h2>Jobs</h2>
+      <div class="jobs" id="jobs-list"><div class="note">Lade …</div></div>
+    </section>
+  </div>
+</main>
+
+<dialog id="player">
+  <h2 style="margin-bottom:10px" id="player-title">Video</h2>
+  <video id="player-video" controls></video>
+  <div class="row" style="margin-top:14px">
+    <a id="player-dl" href="#" download style="text-align:center;padding:11px;background:var(--accent);color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">⬇ Download</a>
+    <button class="ghost" onclick="document.getElementById('player').close()">Schließen</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let avatars = [], selAvatar = null, audioFile = null;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+
+async function refreshHealth() {
+  try {
+    const h = await api('/healthz');
+    $('dot-runpod').className = 'dot ' + (h.runpod_configured ? 'ok' : 'bad');
+    $('dot-s3').className = 'dot ' + (h.s3_configured ? 'ok' : 'bad');
+  } catch {}
+}
+
+async function refreshAvatars() {
+  const d = await api('/api/avatars');
+  avatars = d.avatars;
+  const grid = $('avatar-grid');
+  grid.innerHTML = '';
+  if (!avatars.length) {
+    grid.innerHTML = '<div class="note" style="grid-column:1/-1">Noch keine Avatare — unten hinzufügen (frontales Porträt, guter Mundbereich).</div>';
+  }
+  for (const a of avatars) {
+    const tile = document.createElement('div');
+    tile.className = 'avatar-tile' + (selAvatar === a.id ? ' sel' : '');
+    tile.innerHTML = `<img src="${a.image}" alt=""><div class="name">${a.name}</div>`;
+    tile.onclick = (e) => { if (e.target.className !== 'del') { selAvatar = a.id; refreshAvatars(); updateBtn(); } };
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '×';
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Avatar "${a.name}" löschen?`)) return;
+      await api('/api/avatars/' + a.id, { method: 'DELETE' });
+      if (selAvatar === a.id) selAvatar = null;
+      refreshAvatars(); updateBtn();
+    };
+    tile.appendChild(del);
+    grid.appendChild(tile);
+  }
+  updateBtn();
+}
+
+function updateBtn() {
+  $('btn-render').disabled = !(selAvatar && audioFile);
+}
+
+function setupDrop(dropId, inputId, cb) {
+  const drop = $(dropId), input = $(inputId);
+  drop.onclick = () => input.click();
+  input.onchange = () => cb(input.files[0]);
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('drag'); };
+  drop.ondragleave = () => drop.classList.remove('drag');
+  drop.ondrop = (e) => {
+    e.preventDefault(); drop.classList.remove('drag');
+    if (e.dataTransfer.files.length) cb(e.dataTransfer.files[0]);
+  };
+}
+
+setupDrop('audio-drop', 'audio-file', (f) => {
+  audioFile = f;
+  $('audio-drop').textContent = `🎵 ${f.name} (${(f.size/1048576).toFixed(1)} MB)`;
+  $('audio-drop').classList.add('has');
+  updateBtn();
+});
+
+$('avatar-upload').onchange = async () => {
+  const f = $('avatar-upload').files[0];
+  if (!f) return;
+  const name = prompt('Avatar-Name (Buchstaben/Zahlen/_/-):', f.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_'));
+  if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) return alert('Ungültiger Name');
+  const fd = new FormData();
+  fd.append('name', name); fd.append('image', f);
+  try { await api('/api/avatars', { method: 'POST', body: fd }); }
+  catch (e) { return toast('Avatar-Upload: ' + e.message, true); }
+  $('avatar-upload').value = '';
+  refreshAvatars();
+};
+
+async function render() {
+  $('render-err').textContent = '';
+  $('btn-render').disabled = true;
+  $('btn-render').textContent = 'Reiche Job ein …';
+  const fd = new FormData();
+  fd.append('audio', audioFile);
+  fd.append('avatar_id', selAvatar);
+  fd.append('prompt', $('prompt').value || 'a person is talking');
+  fd.append('size', $('size').value);
+  fd.append('fps', $('fps').value);
+  try {
+    const job = await api('/api/jobs', { method: 'POST', body: fd });
+    toast(`Job ${job.id} eingereicht ✅`);
+    audioFile = null;
+    $('audio-drop').textContent = 'Audio hierher ziehen oder klicken';
+    $('audio-drop').classList.remove('has');
+    refreshJobs();
+  } catch (e) {
+    $('render-err').textContent = e.message;
+  } finally {
+    $('btn-render').disabled = false;
+    $('btn-render').textContent = '🚀 Video rendern';
+    updateBtn();
+  }
+}
+
+function fmtDur(s) {
+  if (!s && s !== 0) return '?';
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+async function refreshJobs() {
+  let jobs;
+  try { jobs = (await api('/api/jobs')).jobs; }
+  catch { return; }
+  const el = $('jobs-list');
+  if (!jobs.length) { el.innerHTML = '<div class="note">Noch keine Jobs.</div>'; return; }
+  el.innerHTML = '';
+  for (const j of jobs.slice(0, 25)) {
+    const div = document.createElement('div');
+    div.className = 'job';
+    div.innerHTML = `
+      <div class="meta">
+        <b>${j.avatar_name || '?'}</b> — ${j.audio_filename || ''} <small>${fmtDur(j.audio_duration_s)} Audio · ${j.size.replace('*', '×')} · ${new Date(j.created_at * 1000).toLocaleString('de-DE')}</small>
+        ${j.status === 'error' && j.error ? `<div class="err">${j.error}</div>` : ''}
+        ${['queued','submitting','running','postprocessing'].includes(j.status) ? `<div class="pbar"><div style="width:${j.progress_pct}%"></div></div><div class="note">${j.progress_note || j.status}</div>` : ''}
+      </div>
+      <span class="badge ${j.status}">${j.status}</span>
+      ${j.status === 'done' ? `<button class="small" onclick="openPlayer('${j.id}')">▶ Abspielen</button>` : ''}
+      ${['queued','submitting','running'].includes(j.status) ? `<button class="small ghost" onclick="cancelJob('${j.id}')">Abbrechen</button>` : ''}
+    `;
+    el.appendChild(div);
+  }
+}
+
+async function openPlayer(jobId) {
+  const v = $('player-video');
+  v.src = `/api/video/${jobId}`;
+  $('player-title').textContent = `Video ${jobId}`;
+  $('player-dl').href = `/api/video/${jobId}`;
+  $('player').showModal();
+}
+
+async function cancelJob(jobId) {
+  if (!confirm('Job abbrechen?')) return;
+  await api(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+  refreshJobs();
+}
+
+function toast(msg, isErr) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+refreshHealth(); refreshAvatars(); refreshJobs();
+setInterval(refreshJobs, 5000);
+setInterval(refreshHealth, 30000);
+</script>
+</body>
+</html>
