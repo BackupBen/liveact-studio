@@ -75,37 +75,48 @@ def ensure_volume(key: str, name: str, size_gb: int, dc: str) -> str:
 # -------------------------------------------------------------- Templates ---
 
 def list_templates(key: str) -> list[dict]:
-    data = _gql(key, "query { myself { templates { id name } } }")
-    return data["myself"]["templates"] or []
+    """Nicht unterstützt: RunPod-GraphQL hat keine Template-List-Query.
+    (Dummy für etwaige Zukunft — immer leer.)"""
+    return []
 
 
 def ensure_template(key: str, name: str, image_name: str,
                     env: list[dict] | None = None,
                     container_disk_gb: int = 40) -> str:
-    """Serverless-Template anlegen (idempotent per Name).
+    """Serverless-Template anlegen.
 
-    Inline-Mutation ohne Variablen-Typen (robust gegen Schema-Schwankungen),
-    Env-Variablen (z. B. S3-Zugang) landen direkt im Template.
+    Es gibt keine List-Query — daher: kanonischer Name versuchen;
+    falls der Name schon existiert (RunPod erzwingt eindeutige Namen),
+    wird ein Name mit Zeitstempel-Suffix angelegt. Vorteil: Ein neues
+    Worker-Image landet garantiert in einem neuen Template statt in einem
+    eventuell veralteten.
     """
-    for t in list_templates(key):
-        if t.get("name") == name:
-            return t["id"]
-    env_str = ", ".join(
-        f'{{ key: {json.dumps(e["key"])}, value: {json.dumps(e["value"])} }}'
-        for e in (env or [])
-    )
-    mutation = (
-        "mutation { saveTemplate(input: { "
-        f"containerDiskInGb: {container_disk_gb}, "
-        f"dockerArgs: {json.dumps('python -u handler.py')}, "
-        f"env: [{env_str}], "
-        f"imageName: {json.dumps(image_name)}, "
-        "isServerless: true, "
-        f"name: {json.dumps(name)}, "
-        "volumeInGb: 0 "
-        "}) { id name } }"
-    )
-    return _gql(key, mutation)["saveTemplate"]["id"]
+    def build_mutation(tname: str) -> str:
+        env_str = ", ".join(
+            f'{{ key: {json.dumps(e["key"])}, value: {json.dumps(e["value"])} }}'
+            for e in (env or [])
+        )
+        return (
+            "mutation { saveTemplate(input: { "
+            f"containerDiskInGb: {container_disk_gb}, "
+            f"dockerArgs: {json.dumps('python -u handler.py')}, "
+            f"env: [{env_str}], "
+            f"imageName: {json.dumps(image_name)}, "
+            "isServerless: true, "
+            f"name: {json.dumps(tname)}, "
+            "volumeInGb: 0 "
+            "}) { id name } }"
+        )
+
+    try:
+        return _gql(key, build_mutation(name))["saveTemplate"]["id"]
+    except RunPodError as e:
+        msg = str(e).lower()
+        if "unique" not in msg and "exist" not in msg and "duplicate" not in msg:
+            raise
+    # Name belegt -> frisches Template mit Suffix
+    import time as _time
+    return _gql(key, build_mutation(f"{name}-{int(_time.time())}"))["saveTemplate"]["id"]
 
 
 # ------------------------------------------------------------- Endpoints ----
