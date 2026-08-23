@@ -54,15 +54,8 @@ RUN git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
 COPY liveact_runner.py handler.py /LiveAct/
 RUN pip install --no-cache-dir runpod boto3 requests
 
-# Smoke-Test: ChunkedVideoWriter + Convert ohne GPU/Gewichte
-RUN python -c "
-import importlib.util as u
-spec = u.spec_from_file_location('lr', '/LiveAct/liveact_runner.py')
-# Nur Syntax-/Struktur-Check ohne torch-Import:
-src = open('/LiveAct/liveact_runner.py').read()
-assert 'class ChunkedVideoWriter' in src and 'def convert_to_wav' in src
-print('liveact_runner Struktur OK')
-"
+# Smoke-Test: Struktur-Check ohne GPU/Gewichte (einzeilig — Dockerfile-Parsing)
+RUN python -c "src = open('/LiveAct/liveact_runner.py').read(); assert 'class ChunkedVideoWriter' in src and 'def convert_to_wav' in src; print('liveact_runner Struktur OK')"
 
 ENV HF_HOME=/runpod-volume/hf
 
