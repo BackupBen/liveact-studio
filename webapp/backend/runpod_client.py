@@ -166,6 +166,8 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
     def lit(v: str) -> str:
         return json.dumps(v)
 
+    # networkVolumeId pinnt den Standort — KEIN zusaetzliches dataCenterId
+    # (fuehrte zu Fehlern bei der Maschinensuche).
     mutation = (
         "mutation { podFindAndDeployOnDemand(input: { "
         "cloudType: ALL, "
@@ -177,7 +179,6 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
         f"imageName: {lit('runpod/base:0.4.0')}, "
         f"dockerArgs: {lit('bash -c ' + json.dumps(cmd))}, "
         f"networkVolumeId: {lit(volume_id)}, "
-        f"dataCenterId: {lit(dc)}, "
         "env: [] "
         "}) { id desiredStatus } }"
     )

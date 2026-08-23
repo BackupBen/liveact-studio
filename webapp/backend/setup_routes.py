@@ -209,7 +209,10 @@ def download_pod(body: DownloadPodAction):
     if body.action == "kill":
         if not pod_id:
             raise HTTPException(404, "Kein Download-Pod bekannt")
-        runpod_client.kill_pod(key, pod_id)
+        try:
+            runpod_client.kill_pod(key, pod_id)
+        except Exception as e:
+            raise HTTPException(502, f"Pod-Kill fehlgeschlagen: {e}")
         setup["download_pod"] = {"pod_id": pod_id, "killed_at": time.time()}
         s["runpod_setup"] = setup
         settings_store.save(s)
@@ -219,9 +222,12 @@ def download_pod(body: DownloadPodAction):
         vol_id = setup.get("volume_id")
         if not vol_id:
             raise HTTPException(400, "Kein Volume vorhanden — zuerst /api/setup")
-        pod_id = runpod_client.launch_download_pod(
-            key, vol_id, setup.get("datacenter", "US-KS-2"),
-            repo="https://github.com/BackupBen/liveact-studio")
+        try:
+            pod_id = runpod_client.launch_download_pod(
+                key, vol_id, setup.get("datacenter", "US-KS-2"),
+                repo="https://github.com/BackupBen/liveact-studio")
+        except Exception as e:
+            raise HTTPException(502, f"Download-Pod-Start fehlgeschlagen: {e}")
         setup["download_pod"] = {"pod_id": pod_id, "started_at": time.time()}
         s["runpod_setup"] = setup
         settings_store.save(s)
