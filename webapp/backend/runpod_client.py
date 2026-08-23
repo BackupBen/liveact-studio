@@ -34,11 +34,18 @@ def _headers(key: str) -> dict:
 def _gql(key: str, query: str, variables: dict | None = None) -> dict:
     r = requests.post(GQL, params={"api_key": key},
                       json={"query": query, "variables": variables or {}}, timeout=60)
-    r.raise_for_status()
-    data = r.json()
-    if data.get("errors"):
-        raise RunPodError(json.dumps(data["errors"], indent=2, ensure_ascii=False))
-    return data["data"]
+    body = None
+    try:
+        body = r.json()
+    except Exception:
+        pass
+    if r.status_code != 200 or (body and body.get("errors")):
+        msgs = []
+        if body and body.get("errors"):
+            for e in body["errors"]:
+                msgs.append(e.get("message", str(e)))
+        raise RunPodError(f"GraphQL {r.status_code}: {'; '.join(msgs) or (r.text or '')[:300]}")
+    return body["data"]
 
 
 # --------------------------------------------------------------- Volumes ----
@@ -68,36 +75,37 @@ def ensure_volume(key: str, name: str, size_gb: int, dc: str) -> str:
 # -------------------------------------------------------------- Templates ---
 
 def list_templates(key: str) -> list[dict]:
-    data = _gql(key, "query { myself { templates { id name imageName isServerless } } }")
+    data = _gql(key, "query { myself { templates { id name } } }")
     return data["myself"]["templates"] or []
 
 
 def ensure_template(key: str, name: str, image_name: str,
                     env: list[dict] | None = None,
-                    container_disk_gb: int = 5) -> str:
-    """Serverless-Template anlegen (idempotent per Name)."""
+                    container_disk_gb: int = 40) -> str:
+    """Serverless-Template anlegen (idempotent per Name).
+
+    Inline-Mutation ohne Variablen-Typen (robust gegen Schema-Schwankungen),
+    Env-Variablen (z. B. S3-Zugang) landen direkt im Template.
+    """
     for t in list_templates(key):
         if t.get("name") == name:
             return t["id"]
-    mutation = """
-    mutation($input: SaveTemplateInput!) {
-      saveTemplate(input: $input) { id name imageName isServerless }
-    }"""
-    variables = {"input": {
-        "containerDiskInGb": container_disk_gb,
-        "dockerArgs": "python -u handler.py",
-        "env": env or [],
-        "imageName": image_name,
-        "isServerless": True,
-        "name": name,
-        "volumeInGb": 0,
-    }}
-    try:
-        return _gql(key, mutation, variables)["saveTemplate"]["id"]
-    except RunPodError:
-        # Fallback: Input-Typname variiert je API-Stand
-        mutation2 = mutation.replace("SaveTemplateInput!", "PodTemplateInput!")
-        return _gql(key, mutation2, variables)["saveTemplate"]["id"]
+    env_str = ", ".join(
+        f'{{ key: {json.dumps(e["key"])}, value: {json.dumps(e["value"])} }}'
+        for e in (env or [])
+    )
+    mutation = (
+        "mutation { saveTemplate(input: { "
+        f"containerDiskInGb: {container_disk_gb}, "
+        f"dockerArgs: {json.dumps('python -u handler.py')}, "
+        f"env: [{env_str}], "
+        f"imageName: {json.dumps(image_name)}, "
+        "isServerless: true, "
+        f"name: {json.dumps(name)}, "
+        "volumeInGb: 0 "
+        "}) { id name } }"
+    )
+    return _gql(key, mutation)["saveTemplate"]["id"]
 
 
 # ------------------------------------------------------------- Endpoints ----
@@ -143,28 +151,26 @@ def launch_download_pod(key: str, volume_id: str, dc: str, repo: str,
         "python /tmp/dl.py --volume /runpod-volume && "
         "echo MODEL_DOWNLOAD_DONE"
     )
-    mutation = """
-    mutation($input: PodFindAndDeployOnDemandInput!) {
-      podFindAndDeployOnDemand(input: $input) { id desiredStatus }
-    }"""
-    variables = {"input": {
-        "cloudType": "ALL",
-        "gpuCount": 1,
-        "containerDiskInGb": 20,
-        "volumeInGb": 0,
-        "gpuTypeId": gpu,
-        "name": "liveact-model-download",
-        "imageName": "runpod/base:0.4.0",
-        "dockerArgs": f"bash -c '{cmd}'",
-        "networkVolumeId": volume_id,
-        "dataCenterId": dc,
-        "env": [],
-    }}
-    try:
-        return _gql(key, mutation, variables)["podFindAndDeployOnDemand"]["id"]
-    except RunPodError:
-        mutation2 = mutation.replace("PodFindAndDeployOnDemandInput!", "PodDeployInput!")
-        return _gql(key, mutation2, variables)["podFindAndDeployOnDemand"]["id"]
+    # GraphQL-Literal ohne Typ-Annotationen im Input-Objekt (robust gegen Schema-Schwankungen)
+    def lit(v: str) -> str:
+        return json.dumps(v)
+
+    mutation = (
+        "mutation { podFindAndDeployOnDemand(input: { "
+        "cloudType: ALL, "
+        "gpuCount: 1, "
+        "containerDiskInGb: 20, "
+        "volumeInGb: 0, "
+        f"gpuTypeId: {lit(gpu)}, "
+        f"name: {lit('liveact-model-download')}, "
+        f"imageName: {lit('runpod/base:0.4.0')}, "
+        f"dockerArgs: {lit('bash -c ' + json.dumps(cmd))}, "
+        f"networkVolumeId: {lit(volume_id)}, "
+        f"dataCenterId: {lit(dc)}, "
+        "env: [] "
+        "}) { id desiredStatus } }"
+    )
+    return _gql(key, mutation)["podFindAndDeployOnDemand"]["id"]
 
 
 def pod_status(key: str, pod_id: str) -> dict:

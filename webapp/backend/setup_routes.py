@@ -118,9 +118,19 @@ def run_setup(body: SetupIn, background_tasks=None):
             vol_id = runpod_client.ensure_volume(key, body.volume_name, body.volume_size_gb, dc)
             _step("volume", f"Volume bereit: {vol_id}")
 
-            # 2. Template
+            # 2. Template (mit S3-Env, damit der Worker an Audio/Avatar kommt)
             _step("template", f"Prüfe/lege Serverless-Template an (Image: {body.worker_image})")
-            template_id = runpod_client.ensure_template(key, "liveact-worker", body.worker_image)
+            template_env = []
+            if config.S3_BUCKET:
+                template_env = [
+                    {"key": "S3_ENDPOINT", "value": config.S3_ENDPOINT},
+                    {"key": "S3_BUCKET", "value": config.S3_BUCKET},
+                    {"key": "S3_ACCESS_KEY", "value": config.S3_ACCESS_KEY},
+                    {"key": "S3_SECRET_KEY", "value": config.S3_SECRET_KEY},
+                    {"key": "S3_REGION", "value": config.S3_REGION},
+                ]
+            template_id = runpod_client.ensure_template(
+                key, "liveact-worker", body.worker_image, env=template_env)
             _step("template", f"Template bereit: {template_id}")
 
             # 3. Endpoint
