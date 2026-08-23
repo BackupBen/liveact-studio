@@ -30,7 +30,10 @@ RUN git clone https://github.com/Soul-AILab/SoulX-LiveAct.git /LiveAct \
 
 WORKDIR /LiveAct
 
-# PyTorch zuerst (cu128-Wheels bringen eigene CUDA-Runtimes mit)
+# PyTorch zuerst (cu128-Wheels bringen eigene CUDA-Runtimes mit).
+# typing-extensions VORHER von PyPI: das 4.16-Wheel wird von neuem pip wegen
+# Name-Metadata verworfen und der sdist-Build scheitert am Torch-Index (kein flit_core).
+RUN pip install --no-cache-dir "typing-extensions==4.12.2"
 RUN pip install --no-cache-dir torch==2.8.0 torchaudio==2.8.0 torchvision==0.23.0 \
         --index-url https://download.pytorch.org/whl/cu128
 
