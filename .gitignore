@@ -6,3 +6,10 @@ __pycache__/
 .pytest_cache
 *.mp4
 *.wav
+webapp/__pycache__/
+worker/__pycache__/
+worker/scripts/__pycache__/
+*.pyc
+worker_test/
+test_avatar.png
+test_audio.wav
