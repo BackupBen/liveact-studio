@@ -223,6 +223,20 @@ async def create_render_job(
 
 @app.get("/api/jobs")
 def jobs_list():
+    jobs = list_jobs()
+    # Auto-Reconcile: Callbacks koennen verloren gehen (PUBLIC_BASE_URL nicht
+    # erreichbar etc.) — hengende Jobs direkt bei RunPod nachziehen.
+    key, endpoint_id = settings_store.get_runpod_credentials()
+    if key and (endpoint_id or config.RUNPOD_ENDPOINT_ID):
+        now = time.time()
+        stale = [j for j in jobs
+                 if j.get("status") in ("queued", "submitting", "running")
+                 and now - j.get("updated_at", 0) > 45]
+        for j in stale[:3]:  # max 3 pro Poll, um Latenz zu begrenzen
+            try:
+                reconcile_job(j["id"])
+            except Exception as e:
+                log.warning(f"Auto-Reconcile {j['id']}: {e}")
     return {"jobs": list_jobs()}
 
 
