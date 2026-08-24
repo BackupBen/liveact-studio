@@ -110,7 +110,7 @@ def get_renderer(cfg_overrides: dict):
         os.getenv("LIVEACT_OFFLOAD_CACHE", "0") == "1",
     )
     size = (cfg_overrides or {}).get("size", os.getenv("LIVEACT_SIZE", "768*432"))
-    fps = (cfg_overrides or {}).get("fps", int(os.getenv("LIVEACT_FPS", "25")))
+    fps = (cfg_overrides or {}).get("fps", int(os.getenv("LIVEACT_FPS", "20")))
     key = (gpu_flags, size, fps)
     if _RENDERER is not None and _RENDERER_CFG_KEY == key:
         return _RENDERER

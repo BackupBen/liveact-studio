@@ -15,9 +15,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MODEL_DIR=/runpod-volume/models/LiveAct \
     WAV2VEC_DIR=/runpod-volume/models/chinese-wav2vec2-base \
     LIVEACT_SIZE=768*432 \
-    LIVEACT_FPS=25 \
+    LIVEACT_FPS=20 \
     LIVEACT_T5_CPU=1 \
     LIVEACT_FP8_KV=1 \
+    TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1 \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -61,6 +62,30 @@ urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/release
     && pip install --no-cache-dir "/tmp/${WHL}" \
     && rm -f "/tmp/${WHL}" \
     && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
+
+# --- SageAttention v2 (optional, Attention-Speedup im 14B-Backbone) ---------
+# Es gibt KEINE Prebuilt-Wheels (Release v2.0.1 hat 0 Assets, PyPI nur v1 mit
+# anderer API) -> Compile aus dem Quellcode. Runner-freundlich:
+#   - nvcc aus den pip-CUDA-Wheels (12.8, passend zu torch cu128), gestitcht
+#     nach /opt/cuda (symlinks)
+#   - NUR sm_90 (H100) statt aller Architekturen
+#   - MAX_JOBS=2 (RAM-Limit des GH-Runners)
+# Fehlschlag = WARN + Image ohne Sage (Upstream faellt auf flash_attn zurueck).
+RUN pip install --no-cache-dir "nvidia-cuda-nvcc-cu12==12.8.*" "nvidia-cuda-runtime-cu12==12.8.*" "nvidia-cuda-cccl-cu12==12.8.*" \
+    && SP=$(python -c "import site; print(site.getsitepackages()[0])") \
+    && mkdir -p /opt/cuda/bin /opt/cuda/include /opt/cuda/lib64 \
+    && ln -s $SP/nvidia/cuda_nvcc/bin/* /opt/cuda/bin/ \
+    && ln -s $SP/nvidia/cuda_nvcc/nvvm /opt/cuda/nvvm \
+    && (ln -s $SP/nvidia/cuda_runtime/include/* /opt/cuda/include/ || true) \
+    && (ln -s $SP/nvidia/cuda_cccl/include/* /opt/cuda/include/ || true) \
+    && (ln -s $SP/nvidia/cuda_runtime/lib/* /opt/cuda/lib64/ || true) \
+    && export CUDA_HOME=/opt/cuda && export PATH=/opt/cuda/bin:$PATH \
+    && nvcc --version \
+    && git clone --depth 1 https://github.com/thu-ml/SageAttention.git /tmp/Sage \
+    && (cd /tmp/Sage && MAX_JOBS=2 TORCH_CUDA_ARCH_LIST="9.0" pip install --no-cache-dir --no-build-isolation .) \
+    && rm -rf /tmp/Sage /root/.cache \
+    && python -c "from sageattention import sageattn; print('sageattn import OK')" \
+    || echo "WARN: SageAttention-Compile fehlgeschlagen — Image ohne Sage (flash_attn aktiv)"
 
 # --- LightVAE: minimal vendoren statt pip-Install --------------------------
 # lightx2v/__init__.py importiert die gesamte Pipeline (zmq etc.) — die braucht

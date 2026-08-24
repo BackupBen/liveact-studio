@@ -30,7 +30,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")    # leer = keine Auth akt
 # --- Worker-Defaults ---
 DEFAULT_GPU = os.environ.get("DEFAULT_GPU", "NVIDIA H100")
 DEFAULT_SIZE = os.environ.get("DEFAULT_SIZE", "768*432")
-DEFAULT_FPS = int(os.environ.get("DEFAULT_FPS", "25"))
+DEFAULT_FPS = int(os.environ.get("DEFAULT_FPS", "20"))
 MAX_AUDIO_MINUTES = int(os.environ.get("MAX_AUDIO_MINUTES", "75"))
 # Chunklänge in Sekunden für den segmentierten Video-Export (RAM-Bombe vermeiden)
 CHUNK_SECONDS = int(os.environ.get("CHUNK_SECONDS", "120"))
