@@ -1,11 +1,10 @@
 # LiveAct Studio — Worker-Image für RunPod Serverless
 #
 # Build-Strategie (GH-Actions-Runner-freundlich):
-#   - KEIN SageAttention-Compile: LiveAct nutzt es OPTIONAL (try/except-Fallback
-#     auf FlashAttention2 / PyTorch-SDPA im Upstream-Code). nvcc-Kompilierung
-#     war der Runner-Killer (RAM/Disk).
-#   - KEIN Conda: Ubuntu 22.04 bringt Python 3.10 nativ.
-#   - devel-Base nur wg. eventuellen Header-Bedarfs; final schlank.
+#   - python:3.10-slim + cu128-Torch-Wheels
+#   - KEIN SageAttention-Compile (Upstream hat try/except-Fallback auf SDPA)
+#   - KEIN LightX2V-pip-Install: dessen __init__ zieht die Pipeline-Bibliothek
+#     (zmq etc.) rein. Wir vendoren NUR die 3 Dateien, die generate.py braucht.
 # Modelle liegen NICHT im Image, sondern auf dem RunPod Network Volume.
 
 FROM python:3.10-slim
@@ -30,10 +29,10 @@ RUN git clone https://github.com/Soul-AILab/SoulX-LiveAct.git /LiveAct \
 
 WORKDIR /LiveAct
 
-# PyTorch zuerst (cu128-Wheels bringen eigene CUDA-Runtimes mit).
-# typing-extensions VORHER von PyPI: das 4.16-Wheel wird von neuem pip wegen
-# Name-Metadata verworfen und der sdist-Build scheitert am Torch-Index (kein flit_core).
+# typing-extensions von PyPI vorab (pip/torch-index Konflikt vermeiden)
 RUN pip install --no-cache-dir "typing-extensions==4.12.2"
+
+# PyTorch (cu128-Wheels bringen eigene CUDA-Runtimes mit)
 RUN pip install --no-cache-dir torch==2.8.0 torchaudio==2.8.0 torchvision==0.23.0 \
         --index-url https://download.pytorch.org/whl/cu128
 
@@ -42,26 +41,39 @@ RUN grep -v -E "^(torch|torchaudio|torchvision)" requirements.txt > /tmp/req.txt
     && pip install --no-cache-dir -r /tmp/req.txt \
     && rm -rf /root/.cache /tmp/req.txt
 
-# flash-attn v2 (Prebuilt-Wheel, kein Compile) — schnelle Attention statt SDPA-Fallback
-# sm89=RTX 4090, sm90=H100. Wheel-Namen: cp310 / torch2.8 / cu12
+# flash-attn v2 (Prebuilt-Wheel, kein Compile) — schneller Attention-Pfad
 RUN pip install --no-cache-dir flash-attn --no-build-isolation \
         --find-links https://github.com/Dao-AILab/flash-attention/releases/tag/v2.8.3 \
     || echo "WARN: flash-attn Wheel nicht gefunden — SDPA-Fallback wird genutzt"
 
-# LightVAE aus LightX2V — av+cython vorher (av hat fertige Wheels; sonst
-# wuerde setup_vae.py av per easy_install aus dem Quellcode bauen).
-# Fallback: direkter Copy des Pure-Python-Pakets in site-packages.
-# (Kein Import-Check: LightX2V prueft beim Import CUDA-Devices — geht nur auf GPU.)
-RUN pip install --no-cache-dir av cython einops loguru \
-    && git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
-    && cd /tmp/LightX2V \
-    && (python setup_vae.py install || cp -r lightx2v /usr/local/lib/python3.10/site-packages/) \
-    && python -c "import os; assert os.path.exists('/usr/local/lib/python3.10/site-packages/lightx2v/models/video_encoders/hf/wan/vae.py'); print('LightVAE-Dateien OK')" \
+# --- LightVAE: minimal vendoren statt pip-Install --------------------------
+# lightx2v/__init__.py importiert die gesamte Pipeline (zmq etc.) — die braucht
+# generate.py NICHT. Wir legen nur die benoetigten Module an; alle __init__.py
+# bleiben LEER, damit kein Treiber-/Pipeline-Ballast laedt. Der Import von
+# global_var in vae.py passiert als Einzelpfad via importlib (siehe
+# liveact_runner-Compat-shim in site-packages).
+RUN git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
+    && LX2V=/usr/local/lib/python3.10/site-packages/lightx2v \
+    && PLAT=/usr/local/lib/python3.10/site-packages/lightx2v_platform \
+    && mkdir -p $LX2V/models/video_encoders/hf/wan $LX2V/utils \
+                $PLAT/base \
+    && cp /tmp/LightX2V/lightx2v/models/video_encoders/hf/wan/vae.py \
+          $LX2V/models/video_encoders/hf/wan/vae.py \
+    && cp /tmp/LightX2V/lightx2v/utils/envs.py $LX2V/utils/envs.py \
+    && cp /tmp/LightX2V/lightx2v/utils/utils.py $LX2V/utils/utils.py 2>/dev/null || true \
+    && cp /tmp/LightX2V/lightx2v_platform/base/global_var.py $PLAT/base/global_var.py \
+    && find $LX2V $PLAT -type d -exec touch {}/__init__.py \; \
+    && python -c "import ast; ast.parse(open('$LX2V/models/video_encoders/hf/wan/vae.py').read()); print('VAE-Datei syntaktisch OK')" \
     && rm -rf /tmp/LightX2V /root/.cache
 
 # Unsere Dateien + Serverless-Extras
-COPY liveact_runner.py handler.py /LiveAct/
-RUN pip install --no-cache-dir runpod boto3 requests
+COPY liveact_runner.py handler.py lightx2v_compat.py /LiveAct/
+RUN pip install --no-cache-dir runpod boto3 requests pyzmq \
+    && SP=/usr/local/lib/python3.10/site-packages \
+    && cp /LiveAct/lightx2v_compat.py $SP/lightx2v_compat.py \
+    && echo "import lightx2v_compat" > $SP/lightx2v_compat_pth.py \
+    && printf 'import lightx2v_compat\n' > $SP/zz_lightx2v_compat.pth \
+    && rm -f $SP/lightx2v_compat_pth.py
 
 # Smoke-Test: Struktur-Check ohne GPU/Gewichte (einzeilig — Dockerfile-Parsing)
 RUN python -c "src = open('/LiveAct/liveact_runner.py').read(); assert 'class ChunkedVideoWriter' in src and 'def convert_to_wav' in src; print('liveact_runner Struktur OK')"
