@@ -132,6 +132,36 @@ def delete_endpoint(key: str, endpoint_id: str) -> None:
     _gql(key, 'mutation { deleteEndpoint(id: "%s") }' % endpoint_id)
 
 
+def update_endpoint(key: str, endpoint_id: str, **fields) -> dict:
+    """Endpoint-Settings per PATCH aendern (z. B. workersMax)."""
+    if not fields:
+        raise RunPodError("update_endpoint ohne Felder")
+    r = requests.patch(f"{REST}/v1/endpoints/{endpoint_id}",
+                       headers=_headers(key), json=fields, timeout=30)
+    if r.status_code not in (200, 201):
+        raise RunPodError(f"Endpoint-Patch {r.status_code}: {(r.text or '')[:300]}")
+    try:
+        return r.json()
+    except Exception:
+        return {}
+
+
+def restart_workers(key: str, endpoint_id: str) -> dict:
+    """Worker deterministisch recyclen: workersMax->0, warten, zurueck.
+
+    Killt warme Worker (die ihr Image behalten) und zaechtigt so ein
+    frisches Image-Pull beim naechsten Job.
+    """
+    eps = list_endpoints(key)
+    current = next((e for e in eps if e["id"] == endpoint_id), None)
+    workers_max = (current or {}).get("workersMax") or 1
+    update_endpoint(key, endpoint_id, workersMax=0)
+    import time as _t
+    _t.sleep(25)  # RunPod die Worker terminieren lassen
+    update_endpoint(key, endpoint_id, workersMax=workers_max)
+    return {"workersMax_restored": workers_max}
+
+
 def ensure_endpoint(key: str, name: str, template_id: str, gpus: list[str],
                     volume_id: str, workers_max: int = 1,
                     execution_timeout_ms: int = 7200000) -> str:

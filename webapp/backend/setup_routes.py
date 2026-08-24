@@ -193,6 +193,20 @@ class DownloadPodAction(BaseModel):
     action: str  # "status" | "kill" | "restart"
 
 
+@router.post("/setup/restart-workers")
+def restart_workers_route():
+    """Warme Serverless-Worker killen, damit der naechste Job das aktuelle
+    Image zieht (fuer nach Image-Updates noetig)."""
+    key, endpoint_id = settings_store.get_runpod_credentials()
+    if not key or not endpoint_id:
+        raise HTTPException(400, "RunPod-API-Key oder Endpoint-ID fehlt (Setup ausführen)")
+    try:
+        result = runpod_client.restart_workers(key, endpoint_id)
+    except Exception as e:
+        raise HTTPException(502, f"Worker-Recycle fehlgeschlagen: {e}")
+    return {"ok": True, **result}
+
+
 @router.post("/setup/download-pod")
 def download_pod(body: DownloadPodAction):
     key, _ = settings_store.get_runpod_credentials()

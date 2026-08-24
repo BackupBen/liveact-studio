@@ -211,6 +211,7 @@
 
   <button onclick="saveSettings()">💾 Speichern</button>
   <button id="btn-provision" onclick="runProvision()">🚀 RunPod einrichten (Volume + Template + Endpoint)</button>
+  <button id="btn-restart" class="ghost" onclick="restartWorkers()">🔄 Worker neu starten (aktuelles Image ziehen)</button>
   <button id="btn-dlpod" class="ghost" onclick="startDownloadPod()">📦 Modelle aufs Volume laden (~55 GB, eigener kleiner Pod)</button>
 
   <div id="setup-log" style="margin-top:14px"></div>
@@ -466,6 +467,19 @@ async function startDownloadPod() {
     const r = await api('/api/setup/download-pod', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart' })});
     toast('Download-Pod gestartet: ' + r.pod_id + ' — Status in der RunPod-Console beobachten');
   } catch (e) { toast('Download-Pod: ' + e.message, true); showCopyableError(e.message); }
+}
+
+async function restartWorkers() {
+  $('btn-restart').disabled = true;
+  $('btn-restart').textContent = '♻️ Recycle Worker … (~30 s)';
+  try {
+    await api('/api/setup/restart-workers', { method: 'POST' });
+    toast('Worker recycelt — der nächste Job zieht das aktuelle Image ✅');
+  } catch (e) { toast('Worker-Recycle: ' + e.message, true); showCopyableError(e.message); }
+  finally {
+    $('btn-restart').disabled = false;
+    $('btn-restart').textContent = '🔄 Worker neu starten (aktuelles Image ziehen)';
+  }
 }
 
 async function pollSetup() {
