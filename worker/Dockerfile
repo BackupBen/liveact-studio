@@ -16,7 +16,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WAV2VEC_DIR=/runpod-volume/models/chinese-wav2vec2-base \
     LIVEACT_SIZE=768*432 \
     LIVEACT_FPS=25 \
-    LIVEACT_T5_CPU=1
+    LIVEACT_T5_CPU=1 \
+    LIVEACT_FP8_KV=1 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git ffmpeg sox libsox-dev libsox-fmt-all build-essential \
