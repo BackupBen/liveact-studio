@@ -27,7 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upstream-Repo gepinnt auf getesteten Commit
 ARG LIVEACT_COMMIT=ac8579b907756f228e975922a5159765c93c6a34
 RUN git clone https://github.com/Soul-AILab/SoulX-LiveAct.git /LiveAct \
-    && cd /LiveAct && git checkout ${LIVEACT_COMMIT} && rm -rf /LiveAct/.git
+    && cd /LiveAct && git checkout ${LIVEACT_COMMIT} && rm -rf /LiveAct/.git \
+    # clip.py ruft flash_attention hart mit version=2 (assert-crash ohne flash-attn).
+    # version=None -> attention.py nutzt fa3/fa2 falls da, sonst SDPA-Fallback.
+    && sed -i 's/version=2/version=None/g' wan/modules/clip.py \
+    && grep -c "version=None" wan/modules/clip.py
 
 WORKDIR /LiveAct
 
