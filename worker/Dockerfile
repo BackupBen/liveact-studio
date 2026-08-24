@@ -47,10 +47,17 @@ RUN grep -v -E "^(torch|torchaudio|torchvision)" requirements.txt > /tmp/req.txt
     && pip install --no-cache-dir -r /tmp/req.txt \
     && rm -rf /root/.cache /tmp/req.txt
 
-# flash-attn v2 (Prebuilt-Wheel, kein Compile) — schneller Attention-Pfad
-RUN pip install --no-cache-dir flash-attn --no-build-isolation \
-        --find-links https://github.com/Dao-AILab/flash-attention/releases/tag/v2.8.3 \
-    || echo "WARN: flash-attn Wheel nicht gefunden — SDPA-Fallback wird genutzt"
+# flash-attn v2.8.3 als Prebuilt-Wheel (cu12/torch2.8/cp310) — DIREKTER Download.
+# (pip --find-links auf GitHub-Releases findet das Wheel nicht zuverlaessig und
+# wuerde aus dem Quellcode bauen -> CUDA_HOME-Crash. clip.py braucht flash_attn
+# zwingend: flash_attention() hat keinen SDPA-Fallback.)
+# ABI-Variante (cxx11abi TRUE/FALSE) dynamisch von torch ablesen.
+RUN ABI=$(python -c "import torch; print('TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE')") \
+    && echo "flash_attn wheel: cxx11abi${ABI}" \
+    && curl -sL -o /tmp/flash_attn.whl "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abi${ABI}-cp310-cp310-linux_x86_64.whl" \
+    && pip install --no-cache-dir /tmp/flash_attn.whl \
+    && rm -f /tmp/flash_attn.whl \
+    && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
 
 # --- LightVAE: minimal vendoren statt pip-Install --------------------------
 # lightx2v/__init__.py importiert die gesamte Pipeline (zmq etc.) — die braucht
