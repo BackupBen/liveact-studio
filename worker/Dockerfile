@@ -52,10 +52,12 @@ RUN grep -v -E "^(torch|torchaudio|torchvision)" requirements.txt > /tmp/req.txt
 # wuerde aus dem Quellcode bauen -> CUDA_HOME-Crash. clip.py braucht flash_attn
 # zwingend: flash_attention() hat keinen SDPA-Fallback.)
 # ABI-Variante (cxx11abi TRUE/FALSE) dynamisch von torch ablesen.
-RUN ABI=$(python -c "import torch; print('TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE')") \
-    && echo "flash_attn wheel: cxx11abi${ABI}" \
-    && WHL="flash_attn-2.8.3+cu12torch2.8cxx11abi${ABI}-cp310-cp310-linux_x86_64.whl" \
-    && python -c "import os, urllib.request; urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/' + os.environ['WHL'], '/tmp/' + os.environ['WHL'])" \
+RUN python -c "import torch, urllib.request, os; \
+abi = 'TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE'; \
+whl = f'flash_attn-2.8.3+cu12torch2.8cxx11abi{abi}-cp310-cp310-linux_x86_64.whl'; \
+print('downloading', whl); \
+urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/' + whl, '/tmp/' + whl)" \
+    && WHL=$(python -c "import torch; abi='TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE'; print(f'flash_attn-2.8.3+cu12torch2.8cxx11abi{abi}-cp310-cp310-linux_x86_64.whl')") \
     && pip install --no-cache-dir "/tmp/${WHL}" \
     && rm -f "/tmp/${WHL}" \
     && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
