@@ -113,6 +113,8 @@ def avatar_image(avatar_id: str):
 
 @app.post("/api/avatars")
 async def add_avatar(name: str = Form(...), image: UploadFile = File(...)):
+    """Avatar anlegen ODER ersetzen (Upsert): gleicher Name = Bild wird
+    ueberschrieben. VidForge kann also einfach immer POSTen."""
     if not SAFE_NAME.match(name):
         raise HTTPException(400, "Name darf nur Buchstaben, Zahlen, _ und - enthalten")
     path, _ = await _save_upload(image, config.DATA_DIR / "avatars", ALLOWED_IMAGE, 20 * 1024 * 1024)
@@ -121,7 +123,8 @@ async def add_avatar(name: str = Form(...), image: UploadFile = File(...)):
     if final.exists():
         final.unlink()
     shutil.move(str(path), final)
-    return {"id": name, "name": name.replace("_", " "), "image": f"/api/avatars/{name}/image"}
+    return {"id": name, "name": name.replace("_", " "), "image": f"/api/avatars/{name}/image",
+            "upsert": True}
 
 
 @app.delete("/api/avatars/{avatar_id}")

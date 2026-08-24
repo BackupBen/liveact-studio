@@ -12,15 +12,21 @@ POST /api/avatars
 Content-Type: multipart/form-data
 
 name=Theo
-image=<avatar.png>        # PNG/JPG/WEBP, frontales Porträt
+image=<avatar.png>        # PNG/JPG/WEBP, frontales Porträt, max 20 MB
 ```
 
 **Response `200`:**
 ```json
-{ "id": "Theo", "name": "Theo", "image": "/api/avatars/Theo/image" }
+{ "id": "Theo", "name": "Theo", "image": "/api/avatars/Theo/image", "upsert": true }
 ```
 
+**Upsert:** Postet VidForge einen bereits existierenden Namen, wird das Bild
+stillschweigend ersetzt (kein DELETE nötig). VidForge kann also vor jedem
+Produktionslauf einfach den aktuellen Avatar POSTen — idempotent.
+
 Avatare auflisten: `GET /api/avatars` → `{"avatars":[{"id":"Theo", ...}]}`
+Avatar-Bild abrufen: `GET /api/avatars/{id}/image` (PNG/JPG/WEBP)
+Löschen: `DELETE /api/avatars/{id}`
 
 ---
 
