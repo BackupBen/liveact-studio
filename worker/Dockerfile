@@ -75,7 +75,7 @@ urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/release
 # die mit unserer trusted-Liste kollidiert. Wir registrieren das Repo direkt.
 RUN echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64 /" > /etc/apt/sources.list.d/cuda-x86_64.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 \
+    && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 libcusparse-dev-12-8 libcusolver-dev-12-8 \
     && rm -rf /var/lib/apt/lists/* \
     && export CUDA_HOME=/usr/local/cuda && export PATH=$CUDA_HOME/bin:$PATH \
     && nvcc --version \
