@@ -64,21 +64,19 @@ urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/release
     && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
 
 # --- SageAttention v2 (optional, Attention-Speedup im 14B-Backbone) ---------
-# Es gibt KEINE Prebuilt-Wheels (Release v2.0.1 hat 0 Assets, PyPI nur v1 mit
-# anderer API) -> Compile aus dem Quellcode. Runner-freundlich:
-#   - nvcc aus den pip-CUDA-Wheels (12.8, passend zu torch cu128), gestitcht
-#     nach /opt/cuda (symlinks)
-#   - NUR sm_90 (H100) statt aller Architekturen
-#   - MAX_JOBS=2 (RAM-Limit des GH-Runners)
-# Fehlschlag = WARN + Image ohne Sage (Upstream faellt auf flash_attn zurueck).
+# KEINE Prebuilt-Wheels -> Compile. nvcc kommt aus dem pip-Wheel
+# nvidia-cuda-nvcc-cu12; dessen Layout variiert je Version -> robust suchen.
 RUN pip install --no-cache-dir "nvidia-cuda-nvcc-cu12==12.8.*" "nvidia-cuda-runtime-cu12==12.8.*" "nvidia-cuda-cccl-cu12==12.8.*" \
-    && SP=$(python -c "import site; print(site.getsitepackages()[0])") \
+    && SP=$(python -c "import nvidia.cuda_nvcc, os; print(os.path.dirname(nvidia.cuda_nvcc.__file__))") \
+    && echo "nvcc-wheel-dir: $SP" && ls -la "$SP" \
+    && NVCC_BIN=$(dirname "$(find "$SP" -name nvcc -type f | head -1)") \
+    && echo "nvcc-bin: $NVCC_BIN" \
     && mkdir -p /opt/cuda/bin /opt/cuda/include /opt/cuda/lib64 \
-    && ln -s $SP/nvidia/cuda_nvcc/bin/* /opt/cuda/bin/ \
-    && ln -s $SP/nvidia/cuda_nvcc/nvvm /opt/cuda/nvvm \
-    && (ln -s $SP/nvidia/cuda_runtime/include/* /opt/cuda/include/ || true) \
-    && (ln -s $SP/nvidia/cuda_cccl/include/* /opt/cuda/include/ || true) \
-    && (ln -s $SP/nvidia/cuda_runtime/lib/* /opt/cuda/lib64/ || true) \
+    && ln -sf "$SP"/nvvm /opt/cuda/nvvm \
+    && for d in "$SP" "$SP/bin"; do ln -sf "$d"/* /opt/cuda/bin/ 2>/dev/null || true; done \
+    && SPRT=$(python -c "import nvidia.cuda_runtime, os; print(os.path.dirname(nvidia.cuda_runtime.__file__))") \
+    && (ln -sf "$SPRT"/include/* /opt/cuda/include/ 2>/dev/null || true) \
+    && (ln -sf "$SPRT"/lib/* /opt/cuda/lib64/ 2>/dev/null || true) \
     && export CUDA_HOME=/opt/cuda && export PATH=/opt/cuda/bin:$PATH \
     && nvcc --version \
     && git clone --depth 1 https://github.com/thu-ml/SageAttention.git /tmp/Sage \
