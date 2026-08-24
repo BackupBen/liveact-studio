@@ -33,9 +33,24 @@ Content-Type: multipart/form-data
 audio=<voiceover.mp3>     # MP3/WAV/M4A/OGG/FLAC/OPUS/AAC/WEBM, max 500 MB, max 75 min
 avatar_id=Theo            # Avatar-ID aus Schritt 1
 prompt=a person is talking  # optional
-size=768*432              # optional (768*432 | 720*416 | 512*512)
-fps=25                    # optional (25 | 20 | 24)
+size=768*432              # optional — PRO JOB wählbar:
+                          #   768*432  Standard (100 % Rechenzeit)
+                          #   512*288  Overlay-Ecke (~2× schneller)
+                          #   384*224  Overlay-Ecke (~4× schneller)
+                          #   720*416 / 512*512 ebenfalls möglich
+fps=20                    # optional (20 Standard | 25 | 24 | 16 Overlay-Sparmodus)
 ```
+
+**Renderzeit-Regel (Faustformel, 1×H100, warm):**
+`Minuten ≈ Audio_min × 2520 / (Breite×Höhe-Pixels relativ zu 768×432) × (fps/20)`
+- 768*432 @ 20: ~66 min pro 10 min Audio
+- 512*288 @ 20: ~30 min · 384*224 @ 16: ~14 min
+
+**VidForge-Overlay-Muster:** Avatar-Segmente (klein in der Ecke) mit
+`size=384*224&fps=16` rendern, Fullscreen-Avatare mit `768*432&fps=20`.
+Mische resolution **nicht innerhalb eines Videos** ohne Neuskalierung im
+Schnitt — die Segmente unterschiedlicher Größe müssen von VidForge auf
+einheitliche Zielgröße gescalet werden (aufrundig empfohlen).
 
 **Response `200`** — Job-Objekt:
 ```json
