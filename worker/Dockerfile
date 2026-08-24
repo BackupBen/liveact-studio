@@ -54,9 +54,10 @@ RUN grep -v -E "^(torch|torchaudio|torchvision)" requirements.txt > /tmp/req.txt
 # ABI-Variante (cxx11abi TRUE/FALSE) dynamisch von torch ablesen.
 RUN ABI=$(python -c "import torch; print('TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE')") \
     && echo "flash_attn wheel: cxx11abi${ABI}" \
-    && python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abi' + '${ABI}' + '-cp310-cp310-linux_x86_64.whl', '/tmp/flash_attn.whl')" \
-    && pip install --no-cache-dir /tmp/flash_attn.whl \
-    && rm -f /tmp/flash_attn.whl \
+    && WHL="flash_attn-2.8.3+cu12torch2.8cxx11abi${ABI}-cp310-cp310-linux_x86_64.whl" \
+    && python -c "import os, urllib.request; urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/' + os.environ['WHL'], '/tmp/' + os.environ['WHL'])" \
+    && pip install --no-cache-dir "/tmp/${WHL}" \
+    && rm -f "/tmp/${WHL}" \
     && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
 
 # --- LightVAE: minimal vendoren statt pip-Install --------------------------
