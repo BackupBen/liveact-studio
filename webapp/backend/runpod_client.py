@@ -128,16 +128,31 @@ def list_endpoints(key: str) -> list[dict]:
     return r.json() or []
 
 
-def ensure_endpoint(key: str, name: str, template_id: str, gpu: str,
+def delete_endpoint(key: str, endpoint_id: str) -> None:
+    _gql(key, 'mutation { deleteEndpoint(id: "%s") }' % endpoint_id)
+
+
+def ensure_endpoint(key: str, name: str, template_id: str, gpus: list[str],
                     volume_id: str, workers_max: int = 1,
                     execution_timeout_ms: int = 7200000) -> str:
+    """Endpoint mit GPU-Prioritaetsliste (idempotent).
+
+    Existiert ein Endpoint gleichen Namens mit ANDERER GPU-Liste, wird er
+    geloescht und neu angelegt (RunPod-REST kann gpuTypeIds nachtraeglich
+    nicht aendern). Die neue Endpoint-ID muss der Caller persistieren.
+    """
+    want = list(dict.fromkeys(gpus))  # dedupliziert, Reihenfolge bleibt
     for e in list_endpoints(key):
         if e.get("name") == name:
-            return e["id"]
+            have = e.get("gpuTypeIds") or []
+            if sorted(have) == sorted(want):
+                return e["id"]
+            delete_endpoint(key, e["id"])
+            break
     body = {
         "name": name,
         "templateId": template_id,
-        "gpuTypeIds": [gpu],
+        "gpuTypeIds": want,
         "networkVolumeId": volume_id,
         "workersMin": 0,
         "workersMax": workers_max,
@@ -149,7 +164,7 @@ def ensure_endpoint(key: str, name: str, template_id: str, gpu: str,
     }
     r = requests.post(f"{REST}/v1/endpoints", headers=_headers(key), timeout=30, json=body)
     if r.status_code not in (200, 201):
-        raise RunPodError(f"Endpoint-Create {r.status_code}: {r.text}")
+        raise RunPodError(f"Endpoint-Create {r.status_code}: {r.text[:300]}")
     return r.json()["id"]
 
 

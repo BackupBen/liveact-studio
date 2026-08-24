@@ -133,10 +133,16 @@ def run_setup(body: SetupIn, background_tasks=None):
                 key, "liveact-worker", body.worker_image, env=template_env)
             _step("template", f"Template bereit: {template_id}")
 
-            # 3. Endpoint
-            _step("endpoint", f"Prüfe/lege Endpoint '{body.gpu}' mit Volume an")
+            # 3. Endpoint mit GPU-Prioritaetsliste (erste freie gewinnt)
+            gpu_chain = [body.gpu] + [g for g in [
+                "NVIDIA H100 NVL",
+                "NVIDIA A100 80GB PCIe",
+                "NVIDIA A100-SXM4-80GB",
+                "NVIDIA GeForce RTX 4090",
+            ] if g != body.gpu]
+            _step("endpoint", f"Pruefe/lege Endpoint (GPUs: {', '.join(gpu_chain[:3])}…) an")
             endpoint_id = runpod_client.ensure_endpoint(
-                key, "liveact", template_id, body.gpu, vol_id,
+                key, "liveact", template_id, gpu_chain, vol_id,
                 workers_max=body.workers_max,
                 execution_timeout_ms=config.EXECUTION_TIMEOUT_MS)
             _step("endpoint", f"Endpoint bereit: {endpoint_id}")
