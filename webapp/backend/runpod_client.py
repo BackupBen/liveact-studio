@@ -135,24 +135,29 @@ def delete_endpoint(key: str, endpoint_id: str) -> None:
 def ensure_endpoint(key: str, name: str, template_id: str, gpus: list[str],
                     volume_id: str, workers_max: int = 1,
                     execution_timeout_ms: int = 7200000) -> str:
-    """Endpoint mit GPU-Prioritaetsliste (idempotent).
+    """Endpoint mit GPU-Prioritaetsliste (idempotent, DC-tolerant).
 
-    Existiert ein Endpoint gleichen Namens mit ANDERER GPU-Liste, wird er
-    geloescht und neu angelegt (RunPod-REST kann gpuTypeIds nachtraeglich
-    nicht aendern). Die neue Endpoint-ID muss der Caller persistieren.
+    Nicht jeder Datacenter bietet jeden GPU-Typ (z. B. US-KS-2: nur H100 80GB).
+    Daher: volle Liste versuchen, dann schrittweise vom Ende (niedrigste
+    Prioritaet) kuerzen, bis der Create klappt.
+    Existierenden Endpoint nur neu anlegen, wenn die primaere GPU abweicht
+    oder GPUs enthalten sind, die nicht mehr gewuenscht sind (kein Endlos-
+    Recycle durch gekuerzte Listen).
     """
     want = list(dict.fromkeys(gpus))  # dedupliziert, Reihenfolge bleibt
     for e in list_endpoints(key):
         if e.get("name") == name:
             have = e.get("gpuTypeIds") or []
-            if sorted(have) == sorted(want):
+            same_primary = bool(have) and bool(want) and have[0] == want[0]
+            obsolete = [g for g in have if g not in want]
+            if same_primary and not obsolete:
                 return e["id"]
             delete_endpoint(key, e["id"])
             break
-    body = {
+
+    base_body = {
         "name": name,
         "templateId": template_id,
-        "gpuTypeIds": want,
         "networkVolumeId": volume_id,
         "workersMin": 0,
         "workersMax": workers_max,
@@ -162,10 +167,16 @@ def ensure_endpoint(key: str, name: str, template_id: str, gpus: list[str],
         "executionTimeoutMs": execution_timeout_ms,
         "flashboot": False,
     }
-    r = requests.post(f"{REST}/v1/endpoints", headers=_headers(key), timeout=30, json=body)
-    if r.status_code not in (200, 201):
-        raise RunPodError(f"Endpoint-Create {r.status_code}: {r.text[:300]}")
-    return r.json()["id"]
+    last_err = ""
+    for n in range(len(want), 0, -1):  # volle Liste, dann vom Ende kuerzen
+        body = {**base_body, "gpuTypeIds": want[:n]}
+        r = requests.post(f"{REST}/v1/endpoints", headers=_headers(key), timeout=30, json=body)
+        if r.status_code in (200, 201):
+            if n < len(want):
+                print(f"[endpoint] nur {n} GPU-Typ(en) verfuegbar: {want[:n]}")
+            return r.json()["id"]
+        last_err = f"{r.status_code}: {r.text[:200]}"
+    raise RunPodError(f"Endpoint-Create fuer keine GPU-Liste erfolgreich ({want}): {last_err}")
 
 
 # ---------------------------------------------- Model-Download-Pod ---------
