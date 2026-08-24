@@ -74,8 +74,8 @@ RUN echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/r
     && apt-get update \
     && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 \
     && rm -rf /var/lib/apt/lists/* \
-    && nvcc --version \
     && export CUDA_HOME=/usr/local/cuda && export PATH=$CUDA_HOME/bin:$PATH \
+    && nvcc --version \
     && git clone --depth 1 https://github.com/thu-ml/SageAttention.git /tmp/Sage \
     && (cd /tmp/Sage && MAX_JOBS=2 TORCH_CUDA_ARCH_LIST="9.0" pip install --no-cache-dir --no-build-isolation .) \
     && rm -rf /tmp/Sage /root/.cache \
