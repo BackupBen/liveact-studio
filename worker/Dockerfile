@@ -7,7 +7,10 @@
 #     (zmq etc.) rein. Wir vendoren NUR die 3 Dateien, die generate.py braucht.
 # Modelle liegen NICHT im Image, sondern auf dem RunPod Network Volume.
 
-FROM python:3.10-slim
+# Bookworm (nicht trixie!): trixies glibc >=2.38 deklariert sinpif & Co. und
+# kollidiert mit CUDA-Headern beim SageAttention-Compile. Bookworm = glibc 2.36
+# = deckungsgleich mit NVIDIAs "debian12"-apt-Repo.
+FROM python:3.10-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
