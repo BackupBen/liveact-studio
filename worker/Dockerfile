@@ -21,8 +21,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LIVEACT_FPS=20 \
     LIVEACT_T5_CPU=1 \
     LIVEACT_FP8_KV=1 \
-    TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1 \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# NICHT setzen: TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS — es capturt frame_seqlen
+# (grid_sizes.item()) in den Compile-Graph; der datenabhaengige KV-Slice
+# k_cache[:, :6*frame_seqlen] crasht dann mit GuardOnDataDependentSymNode.
+# Der Graph-Break bei .item() ist KEIN Bug, sondern noetiger Schutz.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git ffmpeg sox libsox-dev libsox-fmt-all build-essential \
