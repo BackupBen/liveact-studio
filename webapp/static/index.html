@@ -137,7 +137,9 @@
         <div>
           <label>Auflösung</label>
           <select id="size">
-            <option value="768*432">768×432 (16:9)</option>
+            <option value="768*432">768×432 (16:9, Standard)</option>
+            <option value="512*288">512×288 (16:9, ~2× schneller — Overlay-Ecke)</option>
+            <option value="384*224">384×224 (16:9, ~4× schneller — Overlay-Ecke)</option>
             <option value="720*416">720×416 (Original-Training)</option>
             <option value="512*512">512×512 (quadratisch)</option>
           </select>
@@ -145,9 +147,10 @@
         <div>
           <label>FPS</label>
           <select id="fps">
+            <option value="20">20 (Standard, schnell)</option>
             <option value="25">25</option>
-            <option value="20">20</option>
             <option value="24">24</option>
+            <option value="16">16 (Overlay: sehr schnell)</option>
           </select>
         </div>
       </div>
