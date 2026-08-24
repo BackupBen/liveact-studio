@@ -108,7 +108,7 @@ RUN git clone --depth 1 https://github.com/ModelTC/LightX2V.git /tmp/LightX2V \
     && rm -rf /tmp/LightX2V /root/.cache
 
 # Unsere Dateien + Serverless-Extras
-COPY liveact_runner.py handler.py lightx2v_compat.py /LiveAct/
+COPY liveact_runner.py handler.py lightx2v_compat.py runpod_launcher.py render_server.py /LiveAct/
 RUN pip install --no-cache-dir runpod boto3 requests pyzmq \
     && SP=/usr/local/lib/python3.10/site-packages \
     && cp /LiveAct/lightx2v_compat.py $SP/lightx2v_compat.py \
@@ -121,4 +121,4 @@ RUN python -c "src = open('/LiveAct/liveact_runner.py').read(); assert 'class Ch
 
 ENV HF_HOME=/runpod-volume/hf
 
-CMD [ "python", "-u", "handler.py" ]
+CMD [ "python", "-u", "runpod_launcher.py" ]

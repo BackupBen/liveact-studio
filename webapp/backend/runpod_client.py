@@ -83,7 +83,8 @@ def list_templates(key: str) -> list[dict]:
 
 def ensure_template(key: str, name: str, image_name: str,
                     env: list[dict] | None = None,
-                    container_disk_gb: int = 40) -> str:
+                    container_disk_gb: int = 40,
+                    gpu_count: int = 1) -> str:
     """Serverless-Template anlegen.
 
     Es gibt keine List-Query — daher: kanonischer Name versuchen;
@@ -91,7 +92,14 @@ def ensure_template(key: str, name: str, image_name: str,
     wird ein Name mit Zeitstempel-Suffix angelegt. Vorteil: Ein neues
     Worker-Image landet garantiert in einem neuen Template statt in einem
     eventuell veralteten.
+
+    gpu_count > 1 => Multi-GPU-Worker (Sequence-Parallelism via torchrun);
+    der Name haengt dann am gpu_count, damit der Wechsel ein frisches
+    Template ergibt. dockerArgs zeigt auf runpod_launcher.py, der bei
+    >=2 GPUs automatisch torchrun startet.
     """
+    full_name = name if gpu_count == 1 else f"{name}-{gpu_count}gpu"
+
     def build_mutation(tname: str) -> str:
         env_str = ", ".join(
             f'{{ key: {json.dumps(e["key"])}, value: {json.dumps(e["value"])} }}'
@@ -100,24 +108,30 @@ def ensure_template(key: str, name: str, image_name: str,
         return (
             "mutation { saveTemplate(input: { "
             f"containerDiskInGb: {container_disk_gb}, "
-            f"dockerArgs: {json.dumps('python -u handler.py')}, "
+            f"dockerArgs: {json.dumps('python -u runpod_launcher.py')}, "
             f"env: [{env_str}], "
+            f"gpuCount: {gpu_count}, "
             f"imageName: {json.dumps(image_name)}, "
             "isServerless: true, "
             f"name: {json.dumps(tname)}, "
-            "volumeInGb: 0 "
+            "volumeInGb: 0, "
+            f"volumeMountPath: {json.dumps('/runpod-volume')} "
             "}) { id name } }"
         )
 
     try:
-        return _gql(key, build_mutation(name))["saveTemplate"]["id"]
+        return _gql(key, build_mutation(full_name))["saveTemplate"]["id"]
     except RunPodError as e:
         msg = str(e).lower()
+        if "gpucount" in msg:
+            raise RunPodError(
+                "RunPod-API lehnt gpuCount ab — Multi-GPU-Serverless in diesem "
+                "API-Stand nicht verfuegbar. Setup mit gpu_count=1 wiederholen.")
         if "unique" not in msg and "exist" not in msg and "duplicate" not in msg:
             raise
     # Name belegt -> frisches Template mit Suffix
     import time as _time
-    return _gql(key, build_mutation(f"{name}-{int(_time.time())}"))["saveTemplate"]["id"]
+    return _gql(key, build_mutation(f"{full_name}-{int(_time.time())}"))["saveTemplate"]["id"]
 
 
 # ------------------------------------------------------------- Endpoints ----
@@ -180,7 +194,8 @@ def ensure_endpoint(key: str, name: str, template_id: str, gpus: list[str],
             have = e.get("gpuTypeIds") or []
             same_primary = bool(have) and bool(want) and have[0] == want[0]
             obsolete = [g for g in have if g not in want]
-            if same_primary and not obsolete:
+            same_template = e.get("templateId") == template_id
+            if same_primary and not obsolete and same_template:
                 return e["id"]
             delete_endpoint(key, e["id"])
             break

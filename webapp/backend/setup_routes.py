@@ -49,6 +49,7 @@ class SetupIn(BaseModel):
     datacenter: str = "US-KS-2"
     gpu: str = "NVIDIA H100 PCIe"
     workers_max: int = 1
+    gpu_count: int = 1
     start_download_pod: bool = True
 
 
@@ -121,6 +122,7 @@ def run_setup(body: SetupIn, background_tasks=None):
             # 2. Template (mit S3-Env, damit der Worker an Audio/Avatar kommt)
             _step("template", f"Prüfe/lege Serverless-Template an (Image: {body.worker_image})")
             template_env = []
+            gpu_count = int(getattr(body, "gpu_count", 1) or 1)
             if config.S3_BUCKET:
                 template_env = [
                     {"key": "S3_ENDPOINT", "value": config.S3_ENDPOINT},
@@ -130,7 +132,8 @@ def run_setup(body: SetupIn, background_tasks=None):
                     {"key": "S3_REGION", "value": config.S3_REGION},
                 ]
             template_id = runpod_client.ensure_template(
-                key, "liveact-worker", body.worker_image, env=template_env)
+                key, "liveact-worker", body.worker_image, env=template_env,
+                gpu_count=gpu_count)
             _step("template", f"Template bereit: {template_id}")
 
             # 3. Endpoint mit GPU-Prioritaetsliste (erste freie gewinnt)

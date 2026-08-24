@@ -207,6 +207,13 @@
         <input type="text" id="set-volsize" value="200">
       </div>
     </div>
+    <div>
+      <label>GPUs pro Worker</label>
+      <select id="set-gpucount">
+        <option value="1">1 (Standard)</option>
+        <option value="2">2 (~2× schneller pro Video)</option>
+      </select>
+    </div>
   </div>
 
   <button onclick="saveSettings()">💾 Speichern</button>
@@ -450,6 +457,7 @@ async function runProvision() {
       volume_name: $('set-volname').value.trim() || 'liveact-models',
       volume_size_gb: parseInt($('set-volsize').value) || 200,
       datacenter: $('set-dc').value,
+      gpu_count: parseInt($('set-gpucount').value) || 1,
       gpu: $('set-gpu').value,
       start_download_pod: false,
     })});
