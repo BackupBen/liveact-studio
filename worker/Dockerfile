@@ -64,21 +64,18 @@ urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/release
     && python -c "import flash_attn; print('flash_attn', flash_attn.__version__, 'import OK')"
 
 # --- SageAttention v2 (optional, Attention-Speedup im 14B-Backbone) ---------
-# KEINE Prebuilt-Wheels -> Compile. nvcc kommt aus dem pip-Wheel
-# nvidia-cuda-nvcc-cu12; dessen Layout variiert je Version -> robust suchen.
-RUN pip install --no-cache-dir "nvidia-cuda-nvcc-cu12==12.8.*" "nvidia-cuda-runtime-cu12==12.8.*" "nvidia-cuda-cccl-cu12==12.8.*" \
-    && SP=$(python -c "import nvidia.cuda_nvcc, os; print(os.path.dirname(nvidia.cuda_nvcc.__file__))") \
-    && echo "nvcc-wheel-dir: $SP" && ls -la "$SP" \
-    && NVCC_BIN=$(dirname "$(find "$SP" -name nvcc -type f | head -1)") \
-    && echo "nvcc-bin: $NVCC_BIN" \
-    && mkdir -p /opt/cuda/bin /opt/cuda/include /opt/cuda/lib64 \
-    && ln -sf "$SP"/nvvm /opt/cuda/nvvm \
-    && for d in "$SP" "$SP/bin"; do ln -sf "$d"/* /opt/cuda/bin/ 2>/dev/null || true; done \
-    && SPRT=$(python -c "import nvidia.cuda_runtime, os; print(os.path.dirname(nvidia.cuda_runtime.__file__))") \
-    && (ln -sf "$SPRT"/include/* /opt/cuda/include/ 2>/dev/null || true) \
-    && (ln -sf "$SPRT"/lib/* /opt/cuda/lib64/ 2>/dev/null || true) \
-    && export CUDA_HOME=/opt/cuda && export PATH=/opt/cuda/bin:$PATH \
+# KEINE Prebuilt-Wheels; die pip nvidia-cuda-nvcc-Wheels enthalten KEIN nvcc
+# (nur ptxas). Daher nvcc aus NVIDIAs debian12-apt-Repo (Base = python:3.10-slim
+# auf Debian 12). Nur sm_90 (H100) + MAX_JOBS=2 gegen Runner-RAM-Tod.
+# Fehlschlag = WARN + Image ohne Sage (Upstream faellt auf flash_attn zurueck).
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
+    && python -c "import urllib.request; urllib.request.urlretrieve('https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb', '/tmp/cuda-keyring.deb')" \
+    && dpkg -i /tmp/cuda-keyring.deb && rm -f /tmp/cuda-keyring.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 \
+    && rm -rf /var/lib/apt/lists/* \
     && nvcc --version \
+    && export CUDA_HOME=/usr/local/cuda && export PATH=$CUDA_HOME/bin:$PATH \
     && git clone --depth 1 https://github.com/thu-ml/SageAttention.git /tmp/Sage \
     && (cd /tmp/Sage && MAX_JOBS=2 TORCH_CUDA_ARCH_LIST="9.0" pip install --no-cache-dir --no-build-isolation .) \
     && rm -rf /tmp/Sage /root/.cache \
