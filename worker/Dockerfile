@@ -68,9 +68,11 @@ urllib.request.urlretrieve('https://github.com/Dao-AILab/flash-attention/release
 # (nur ptxas). Daher nvcc aus NVIDIAs debian12-apt-Repo (Base = python:3.10-slim
 # auf Debian 12). Nur sm_90 (H100) + MAX_JOBS=2 gegen Runner-RAM-Tod.
 # Fehlschlag = WARN + Image ohne Sage (Upstream faellt auf flash_attn zurueck).
-RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
-    && python -c "import urllib.request; urllib.request.urlretrieve('https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb', '/tmp/cuda-keyring.deb')" \
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb', '/tmp/cuda-keyring.deb')" \
     && dpkg -i /tmp/cuda-keyring.deb && rm -f /tmp/cuda-keyring.deb \
+    # Debian trixie's sqv lehnt NVIDIAs SHA1-Signatur ab (Policy 2026) ->
+    # Repo als trusted kennzeichnen (HTTPS + offizielle NVIDIA-Domain).
+    && echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64 /" > /etc/apt/sources.list.d/cuda-x86_64.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 \
     && rm -rf /var/lib/apt/lists/* \
