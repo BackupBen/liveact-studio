@@ -252,10 +252,16 @@ class LiveActRenderer:
         else:
             wan_i2v_model = wan_i2v_model.to(device)
         wan_i2v_model.eval()
-        wan_i2v_model = torch.compile(wan_i2v_model)
+        # torch.compile nur wenn Dynamo aktiv (TORCHDYNAMO_DISABLE=1 => eager).
+        # Eager + SageAttention ist deterministisch und hier schneller als
+        # compile + flash_attn (Custom-Ops untracebar, Recompiles bei dynamischen
+        # Sequenzlaengen). Siehe Dockerfile-Kommentar.
+        if os.getenv("TORCHDYNAMO_DISABLE", "0") != "1":
+            wan_i2v_model = torch.compile(wan_i2v_model)
 
         vae.model.eval()
-        vae.encode = torch.compile(vae.encode)
+        if os.getenv("TORCHDYNAMO_DISABLE", "0") != "1":
+            vae.encode = torch.compile(vae.encode)
         torch_gc()
 
         self.rank, self.world_size, self.device = rank, world_size, device
