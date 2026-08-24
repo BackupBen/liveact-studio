@@ -78,6 +78,10 @@ RUN echo "deb [trusted=yes] https://developer.download.nvidia.com/compute/cuda/r
     && apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 libcublas-dev-12-8 libcusparse-dev-12-8 libcusolver-dev-12-8 \
     && rm -rf /var/lib/apt/lists/* \
     && export CUDA_HOME=/usr/local/cuda && export PATH=$CUDA_HOME/bin:$PATH \
+    # libcuda.so ist nur als Stub im Toolkit (echte kommt zur Laufzeit vom
+    # Host-Treiber) — Stub fuer den Linker verfuegbar machen:
+    && (ln -sf $CUDA_HOME/lib64/stubs/libcuda.so $CUDA_HOME/lib64/libcuda.so 2>/dev/null || true) \
+    && export LIBRARY_PATH=$CUDA_HOME/lib64/stubs:$CUDA_HOME/lib64:$LIBRARY_PATH \
     && nvcc --version \
     && git clone --depth 1 https://github.com/thu-ml/SageAttention.git /tmp/Sage \
     && (cd /tmp/Sage && MAX_JOBS=2 TORCH_CUDA_ARCH_LIST="9.0" pip install --no-cache-dir --no-build-isolation .) \
